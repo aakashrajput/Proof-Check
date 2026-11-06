@@ -27,6 +27,7 @@ export default function CampaignForm({ action, mode, gemReady, initial = {} }: P
   const [minSeconds, setMinSeconds] = useState<number>(initial.min_seconds ?? 120);
   const minMinutes = Math.round((minSeconds / 60) * 100) / 100;
   const [variants, setVariants] = useState<VariantDraft[]>(initial.variants?.length ? initial.variants : [{ label: "A", title: initial.video_title ?? "", thumb_url: initial.thumbnail_url ?? null, thumb_data: null }]);
+  const [askConfirm, setAskConfirm] = useState<boolean>(initial.attest === undefined ? true : (initial.attest ?? "").trim().length > 0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastId = useRef<string | null>(initial.video_id ?? null);
 
@@ -120,10 +121,15 @@ export default function CampaignForm({ action, mode, gemReady, initial = {} }: P
         {variants.length < 3 && <button type="button" className="secondary addv" onClick={addVariant}>+ Add variant {(["A", "B", "C"] as const)[variants.length]}</button>}
       </div>
 
-      <h3 style={{ marginTop: 18 }}>Worker must confirm before verifying <span className="muted" style={{ textTransform: "none", letterSpacing: 0 }}>— self-declared; recorded on every submission so you can spot-check</span></h3>
-      <div className="attest-opts">
+      <h3 style={{ marginTop: 18 }}>Engagement confirmation</h3>
+      <label className="switch">
+        <input type="checkbox" checked={askConfirm} onChange={(e) => setAskConfirm(e.target.checked)} />
+        <span className="track" aria-hidden="true" />
+        <span><b>Ask workers to confirm engagement before verifying</b><span className="small muted" style={{ display: "block" }}>Shows a glowing checklist (like / subscribe / comment) that must be ticked before the Verify button works. Self-declared and recorded on each submission for spot-checks. Off = the block is hidden.</span></span>
+      </label>
+      <div className="attest-opts" style={{ opacity: askConfirm ? 1 : .4, marginLeft: 46 }}>
         {([["like", "Liked the video"], ["subscribe", "Subscribed to the channel"], ["comment", "Left a relevant comment"]] as const).map(([k, l]) => (
-          <label key={k} className="attest-opt"><input type="checkbox" name="attest" value={k} defaultChecked={(initial.attest ?? "like,subscribe,comment").split(",").includes(k)} /> {l}</label>
+          <label key={k} className="attest-opt"><input type="checkbox" name="attest" value={k} disabled={!askConfirm} defaultChecked={(initial.attest === undefined ? "like,subscribe,comment" : initial.attest ?? "").split(",").includes(k)} /> {l}</label>
         ))}
       </div>
 
