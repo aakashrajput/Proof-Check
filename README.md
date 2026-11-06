@@ -6,6 +6,15 @@ Workers prove the watch with YouTube's **Stats for nerds** panel — either the 
 includes true played time) or a **screenshot** (read by Gemini Flash), or both. ProofCheck checks it and hands out a one-time payout code.
 If a SproutGigs job is linked, it rates submissions `ok` automatically when the proof contains a valid code.
 
+## Video lookup & title/thumbnail variants
+
+Pasting a YouTube URL in the campaign form looks the video up live (`/api/youtube/lookup`): title, channel and thumbnail via
+oEmbed, plus duration and @handle when `YOUTUBE_API_KEY` is set. Each campaign carries up to three **title + thumbnail
+variants** (A = what YouTube currently shows, B/C = your own title and an uploaded thumbnail, resized in the browser to
+640×360 JPEG and stored with the campaign). Workers see all variants so they recognise the video under YouTube's own
+title/thumbnail tests, and pick the one they saw; the campaign page shows the split. It's self-reported, so treat it as a
+recognition signal rather than an impression count.
+
 ## Two proof paths
 
 | | Debug-info text | Screenshot |

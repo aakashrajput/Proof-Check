@@ -44,7 +44,19 @@ const slug = "T" + randomBytes(3).toString("hex");
 await db.execute({ sql: "INSERT INTO campaigns (slug,name,video_id,min_seconds,keywords,owner_id) VALUES (?,?,?,?,?,?)", args: [slug, "e2e", VIDEO, 120, "kw one\nkw two", uid] });
 const cid = Number((await db.execute({ sql: "SELECT id FROM campaigns WHERE slug=?", args: [slug] })).rows[0].id);
 
+// variants (A/B/C) for this campaign
+await db.execute({ sql: "INSERT INTO campaign_variants (campaign_id,label,title,thumb_url,position) VALUES (?,?,?,?,?)", args: [cid, "A", "Title A — original", `https://i.ytimg.com/vi/${VIDEO}/hqdefault.jpg`, 0] });
+await db.execute({ sql: "INSERT INTO campaign_variants (campaign_id,label,title,thumb_data,position) VALUES (?,?,?,?,?)", args: [cid, "B", "Title B — test", "data:image/jpeg;base64,/9j/4AAQSkZJRg==", 1] });
+const vB = Number((await db.execute({ sql: "SELECT id FROM campaign_variants WHERE campaign_id=? AND label='B'", args: [cid] })).rows[0].id);
+const lk401 = await fetch(`${base}/api/youtube/lookup?v=${VIDEO}`).then((r) => r.status);
+ok(lk401 === 401, "youtube lookup requires sign-in");
+const lk400 = await fetch(`${base}/api/youtube/lookup?v=nope`, { headers: { cookie } }).then((r) => r.status);
+ok(lk400 === 400, "youtube lookup rejects junk input");
+const lkOk = await fetch(`${base}/api/youtube/lookup?v=https://youtu.be/${VIDEO}`, { headers: { cookie } }).then((r) => r.json());
+ok(lkOk.videoId === VIDEO && lkOk.thumbnails?.high?.includes(VIDEO), "youtube lookup parses URL and returns thumbnail URLs (title needs network)");
+
 const page = await fetch(`${base}/t/${slug}?src=sg`).then((r) => r.text());
+ok(page.includes("Title A — original") && page.includes("Title B — test") && page.includes("looks like one of these"), "worker page shows A/B variants");
 ok(page.includes("kw one") || page.includes("kw two"), "worker page renders a keyword");
 ok(page.includes("what gets a proof declined") && page.includes("2:00 min"), "worker page shows requirements card with min watch time");
 const other = await fetch(`${base}/app/c/${(await db.execute({ sql: "SELECT id FROM campaigns WHERE slug=?", args: [slug] })).rows[0].id}`, { headers: { cookie } }).then((r) => r.status);
@@ -56,10 +68,11 @@ ok(denied === 404, "another user cannot open someone else's campaign (404)");
 const page2 = await fetch(`${base}/t/${slug}`).then((r) => r.text());
 ok((page.includes("kw one")) !== (page2.includes("kw one")), "keyword rotates between visits");
 
-async function submit(bytes, mockOverride, text) {
+async function submit(bytes, mockOverride, text, variantId) {
   // The server reads GEMINI_MOCK_JSON from env; we vary the *image bytes* and rely on a per-request header hook below.
   const fd = new FormData();
   fd.set("slug", slug); fd.set("src", "sg"); fd.set("worker_ref", "tester");
+  if (variantId) fd.set("variant_id", String(variantId));
   if (text) fd.set("text", text);
   if (bytes) fd.append("file", new Blob([bytes], { type: "image/png" }), "s.png");
   const r = await fetch(`${base}/api/verify`, { method: "POST", body: fd, headers: mockOverride ? { "x-mock-read": JSON.stringify(mockOverride) } : {} });
@@ -86,8 +99,14 @@ r = await submit(png("f"), { ...good, scpn: "NEWNONCE4", looks_edited: true, con
 ok(r.reason === "edited_screenshot", "edited screenshot rejected");
 r = await submit(png("g"), { ...good, scpn: "NEWNONCE5", frames_total: null });
 ok(r.status === "review", `unreadable frames -> review (${r.reason})`);
-r = await submit(png("h"), { ...good, scpn: "NEWNONCE6" });
+r = await submit(png("h"), { ...good, scpn: "NEWNONCE6" }, null, vB);
 ok(r.status === "pass", "second clean session passes");
+const sawB = (await db.execute({ sql: "SELECT variant_id FROM submissions WHERE id=?", args: [r.submission_id] })).rows[0].variant_id;
+ok(Number(sawB) === vB, "submission records which variant the worker saw");
+r = await submit(png("h2"), { ...good, scpn: "NEWNONCE6b" }, null, 999999);
+ok(r.status === "pass" && (await db.execute({ sql: "SELECT variant_id FROM submissions WHERE id=?", args: [r.submission_id] })).rows[0].variant_id == null, "variant id from another campaign is ignored");
+const cpage = (await fetch(`${base}/app/c/${cid}`, { headers: { cookie } }).then((r) => r.text())).replace(/<!-- -->/g, "");
+ok(cpage.includes("what workers reported seeing") && cpage.includes("B · 100%"), "campaign page shows variant split (B 100%)");
 
 // ---- text proof path ----
 const dbg = (o = {}) => JSON.stringify({ ns: "yt", el: "detailpage", cpn: "Qm7xP2kLa9Rt3VbN", ver: 2, fmt: "247", c: "WEB", cplatform: "DESKTOP", docid: VIDEO,
@@ -143,6 +162,7 @@ await db.execute({ sql: "DELETE FROM submissions WHERE campaign_id=?", args: [ci
 await db.execute({ sql: "DELETE FROM codes WHERE campaign_id=?", args: [cid] });
 await db.execute({ sql: "DELETE FROM events WHERE campaign_id=?", args: [cid] });
 await db.execute({ sql: "DELETE FROM campaigns WHERE id=?", args: [cid] });
+await db.execute({ sql: "DELETE FROM campaign_variants WHERE campaign_id=?", args: [cid] });
 await db.execute({ sql: "DELETE FROM users WHERE email IN (?, ?)", args: [email, "x" + email] });
 console.log(fails ? `\n${fails} FAILED` : "\nALL PASSED");
 process.exit(fails ? 1 : 0);

@@ -5,6 +5,7 @@ import { currentUser } from "@/lib/auth";
 import { sgCredsFor } from "@/lib/sproutgigs";
 import { createCampaign } from "./actions";
 import Header from "./Header";
+import CampaignForm from "./CampaignForm";
 
 export const dynamic = "force-dynamic";
 
@@ -53,32 +54,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         )}
       </div>
 
-      <form className="card" action={createCampaign}>
-        <h2>New campaign</h2>
-        <div className="row">
-          <div><label htmlFor="name">Name</label><input id="name" name="name" required placeholder="Nov promo — video 3" /></div>
-          <div><label htmlFor="video">YouTube video URL or ID</label><input id="video" name="video" required placeholder="https://youtu.be/…" /></div>
-        </div>
-        <div className="row">
-          <div><label htmlFor="min_seconds">Minimum watch time (seconds)</label><input id="min_seconds" name="min_seconds" type="number" min={0} defaultValue={120} /></div>
-          <div><label htmlFor="min_frames">Minimum frames (optional, used when fps isn't readable)</label><input id="min_frames" name="min_frames" type="number" min={0} defaultValue={0} /></div>
-        </div>
-        <label htmlFor="keywords">Search keywords — one per line, rotated evenly across workers</label>
-        <textarea id="keywords" name="keywords" rows={4} placeholder={"best budget phone 2026 review\nbudget phone camera test"} />
-        <label htmlFor="instructions">Custom instructions (optional — a default step list is shown if blank)</label>
-        <textarea id="instructions" name="instructions" rows={3} />
-        <div className="row">
-          <div><label htmlFor="proof_mode">Accepted proof</label>
-            <select id="proof_mode" name="proof_mode" defaultValue={gemReady ? "either" : "text"}>
-              <option value="either">Debug-info text OR screenshot</option>
-              <option value="text">Debug-info text only (no AI cost)</option>
-              <option value="screenshot" disabled={!gemReady}>Screenshot only{gemReady ? "" : " (needs GEMINI_API_KEY)"}</option>
-              <option value="both" disabled={!gemReady}>Both required{gemReady ? "" : " (needs GEMINI_API_KEY)"}</option>
-            </select></div>
-          <div><label htmlFor="sg_job_id">SproutGigs job ID (optional — enables auto-rating)</label><input id="sg_job_id" name="sg_job_id" placeholder="e.g. 123456" /></div>
-        </div>
-        <div style={{ marginTop: 12 }}><button type="submit">Create campaign</button></div>
-      </form>
+      <CampaignForm action={createCampaign} mode="create" gemReady={gemReady} />
     </div>
   );
 }

@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   // Everything here is per-request dynamic data; keep caching off for simplicity.
   cacheComponents: false,
   serverExternalPackages: ["@libsql/client"],
+  experimental: { serverActions: { bodySizeLimit: "2mb" } },
 };
 
 export default nextConfig;

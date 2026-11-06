@@ -6,7 +6,10 @@ type Result = { status: "pass" | "fail" | "review"; reason: string; message: str
   details?: { frames_total?: number | null; watch_seconds?: number | null; video_id?: string | null; source?: string } };
 type Mode = "either" | "screenshot" | "text" | "both";
 
-export default function UploadForm({ slug, src, workerRef, disabled, mode }: { slug: string; src: string | null; workerRef: string | null; disabled: boolean; mode: Mode }) {
+type VariantOpt = { id: number; label: string; title: string; thumb: string };
+
+export default function UploadForm({ slug, src, workerRef, disabled, mode, variants = [] }: { slug: string; src: string | null; workerRef: string | null; disabled: boolean; mode: Mode; variants?: VariantOpt[] }) {
+  const [variantId, setVariantId] = useState<number | null>(variants.length === 1 ? variants[0].id : null);
   const [files, setFiles] = useState<File[]>([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -27,6 +30,7 @@ export default function UploadForm({ slug, src, workerRef, disabled, mode }: { s
     if (src) fd.set("src", src);
     if (wref) fd.set("worker_ref", wref);
     if (text.trim()) fd.set("text", text.trim());
+    if (variantId) fd.set("variant_id", String(variantId));
     files.slice(0, 2).forEach((f) => fd.append("file", f));
     try {
       const r = await fetch("/api/verify", { method: "POST", body: fd });
@@ -53,6 +57,17 @@ export default function UploadForm({ slug, src, workerRef, disabled, mode }: { s
         {files.length > 0 && <div className="thumbs">{files.map((f, i) => <img key={i} src={URL.createObjectURL(f)} alt="" />)}</div>}
       </>)}
       {mode === "either" && <p className="small muted">You can send either one, or both — if both, they must be from the same playback.</p>}
+      {variants.length > 1 && (<>
+        <label>Which version did you see in YouTube search?</label>
+        <div className="vcards">
+          {variants.map((v) => (
+            <label className="vcard" key={v.id}>
+              <input type="radio" name="variant" checked={variantId === v.id} onChange={() => setVariantId(v.id)} />
+              <img src={v.thumb} alt="" /><div className="vt"><b>{v.label}</b> · {v.title}</div>
+            </label>
+          ))}
+        </div>
+      </>)}
       <label>Your worker ID / username (optional, helps the employer find you)</label>
       <input value={wref} onChange={(e) => setWref(e.target.value)} placeholder="e.g. your SproutGigs username" />
       <div style={{ marginTop: 12 }}>

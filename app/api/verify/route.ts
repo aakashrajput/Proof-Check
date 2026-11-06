@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { one, run, type Campaign } from "@/lib/db";
 import { verifySubmission } from "@/lib/verify";
 
+
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
@@ -35,6 +36,11 @@ export async function POST(req: Request) {
     const result = await verifySubmission(c, files,
       { worker_ref: (fd.get("worker_ref") as string) || null, src: (fd.get("src") as string) || null, mock: req.headers.get("x-mock-read") },
       (fd.get("text") as string) || null);
+    const variantId = Number(fd.get("variant_id")) || 0;
+    if (variantId && result.submission_id) {
+      const v = await one("SELECT id FROM campaign_variants WHERE id = ? AND campaign_id = ?", [variantId, c.id]);
+      if (v) await run("UPDATE submissions SET variant_id = ? WHERE id = ?", [variantId, result.submission_id]);
+    }
     return NextResponse.json(result);
   } catch (e) {
     console.error("verify error", e);

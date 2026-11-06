@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { one, run, type Campaign } from "@/lib/db";
+import { one, q, run, type Campaign, type Variant } from "@/lib/db";
 import UploadForm from "./UploadForm";
 import CopyBtn from "./Copy";
 
@@ -20,6 +20,7 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
   }
   await run("INSERT INTO events (campaign_id, kind, src) VALUES (?, 'opened', ?)", [c.id, src ?? null]);
 
+  const variants = await q<Variant>("SELECT id, label, title, thumb_url, thumb_data FROM campaign_variants WHERE campaign_id = ? ORDER BY position", [c.id]);
   const closed = c.status !== "active";
   const minTxt = c.min_seconds ? `${Math.floor(c.min_seconds / 60)}:${String(c.min_seconds % 60).padStart(2, "0")} min` : c.min_frames ? `${c.min_frames} frames` : null;
 
@@ -31,6 +32,15 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
         <h1>{c.name}</h1>
         {c.video_title && <p className="muted">Video: <b>{c.video_title}</b>{c.channel_title ? <> · Channel: <b>{c.channel_handle ?? c.channel_title}</b></> : null}</p>}
         {closed && <p style={{ color: "var(--bad)" }}>This task is currently closed.</p>}
+        {variants.length > 0 && (
+          <>
+            <h3 style={{ marginTop: 12 }}>{variants.length > 1 ? "In search results the video looks like one of these" : "In search results the video looks like this"}</h3>
+            <div className="vcards">
+              {variants.map((v) => <div className="vcard" key={v.id} style={{ cursor: "default" }}><img src={v.thumb_data ?? v.thumb_url ?? `https://i.ytimg.com/vi/${c.video_id}/mqdefault.jpg`} alt="" /><div className="vt">{v.title || c.video_title || c.video_id}</div></div>)}
+            </div>
+            {variants.length > 1 && <p className="small muted" style={{ marginTop: 6 }}>YouTube shows different people different versions. Any of them is the right video — you'll tell us which one you saw.</p>}
+          </>
+        )}
       </div>
 
       <div className="card" style={{ borderColor: "var(--accent)" }}>
@@ -70,7 +80,8 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
 
       <div className="card">
         <h3>Submit your proof</h3>
-        <UploadForm slug={c.slug} src={src ?? null} workerRef={w ?? null} disabled={closed} mode={c.proof_mode ?? "either"} />
+        <UploadForm slug={c.slug} src={src ?? null} workerRef={w ?? null} disabled={closed} mode={c.proof_mode ?? "either"}
+          variants={variants.map((v) => ({ id: v.id, label: v.label, title: v.title || c.video_title || c.video_id, thumb: v.thumb_data ?? v.thumb_url ?? `https://i.ytimg.com/vi/${c.video_id}/mqdefault.jpg` }))} />
       </div>
       <p className="small muted">Only the panel reading and a small fingerprint are kept; screenshots and debug text are not stored after checking.</p>
     </div>

@@ -89,7 +89,10 @@ export type Campaign = {
   channel_title: string | null; channel_handle: string | null; min_frames: number; min_seconds: number;
   keywords: string; keyword_cursor: number; instructions: string; sg_job_id: string | null;
   status: string; created_at: string; proof_mode: "either" | "screenshot" | "text" | "both"; owner_id: number | null;
+  duration_seconds: number | null; thumbnail_url: string | null;
 };
+
+export type Variant = { id: number; campaign_id: number; label: string; title: string; thumb_url: string | null; thumb_data: string | null; position: number };
 
 export type User = { id: number; email: string; password_hash: string; name: string | null; sg_user_id: string | null; sg_secret_enc: string | null; created_at: string };
 
@@ -98,5 +101,5 @@ export type Submission = {
   sha256_2: string | null; scpn: string | null; video_id_read: string | null; frames_total: number | null;
   frames_dropped: number | null; fps: number | null; watch_seconds: number | null; status: string;
   reason: string; payout_code: string | null; raw_json: string | null; created_at: string;
-  text_sha256: string | null; source: string | null; played_seconds: number | null;
+  text_sha256: string | null; source: string | null; played_seconds: number | null; variant_id: number | null;
 };
