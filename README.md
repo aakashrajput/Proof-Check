@@ -47,13 +47,18 @@ Optional: `node scripts/seed-demo.mjs` creates a demo campaign at `/t/DEMO1`.
 CRON_SECRET=anything BASE_URL=http://localhost:3000 node scripts/poll.mjs 10   # polls every 10s
 ```
 
-## Deploy to Vercel
+## Deploy to Vercel (works from a phone)
 
-1. Push this folder to GitHub, import in Vercel.
-2. Database: SQLite files don't persist on Vercel. Create a free [Turso](https://turso.tech) DB and set
-   `DATABASE_URL=libsql://…turso.io` and `DATABASE_AUTH_TOKEN`.
-3. Set the env vars from `.env.example`. `CRON_SECRET` is required for the cron in `vercel.json`
-   (every minute on Pro; on Hobby, run `scripts/poll.mjs` from your laptop or a $3 VPS instead).
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Faakashrajput%2FProof-Check&project-name=proof-check&env=ADMIN_PASSWORD,CRON_SECRET&envDescription=ADMIN_PASSWORD%20protects%20%2Fadmin.%20CRON_SECRET%20is%20any%20random%20string.&envLink=https%3A%2F%2Fgithub.com%2Faakashrajput%2FProof-Check%23deploy-to-vercel-works-from-a-phone)
+
+1. Tap the button, sign in with GitHub, tap **Deploy**. Enter `ADMIN_PASSWORD` and `CRON_SECRET` when asked.
+2. **Database** — SQLite files don't persist on Vercel. In the project: **Storage → Create Database → Turso** (free).
+   Vercel injects `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` and the app picks them up; redeploy once.
+   (Or set `DATABASE_URL` + `DATABASE_AUTH_TOKEN` yourself from turso.tech.)
+3. **Settings → Environment Variables**: add `GEMINI_API_KEY` for screenshot proof (text proof works without it),
+   and `SG_USER_ID` / `SG_API_SECRET` for auto-rating.
+4. Cron: `vercel.json` ships a **daily** schedule so Hobby deploys succeed. On Pro change it to `* * * * *`;
+   on Hobby, run `node scripts/poll.mjs` from any machine, or use the **Sync SproutGigs now** button.
 
 ## SproutGigs setup
 

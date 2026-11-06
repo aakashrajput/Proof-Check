@@ -7,8 +7,10 @@ let ready: Promise<void> | null = null;
 
 export function db(): Client {
   if (!client) {
-    const url = process.env.DATABASE_URL || "file:./data/proofcheck.db";
-    client = createClient({ url, authToken: process.env.DATABASE_AUTH_TOKEN });
+    // Vercel Marketplace's Turso integration injects TURSO_DATABASE_URL / TURSO_AUTH_TOKEN automatically.
+    const url = process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL || "file:./data/proofcheck.db";
+    const authToken = process.env.DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN;
+    client = createClient({ url, authToken });
   }
   return client;
 }
