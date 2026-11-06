@@ -194,3 +194,12 @@ details.hint summary::-webkit-details-marker { display: none; }
 .switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #9a93a8; transition: all .15s; }
 .switch input:checked + .track { background: var(--accent); } .switch input:checked + .track::after { left: 18px; background: #fff; }
 .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* submissions table */
+table.subs th, table.subs td { padding: 10px 8px; vertical-align: top; white-space: normal; }
+table.subs td.nowrap, table.subs th.nowrap, .nowrap { white-space: nowrap; }
+table.subs .reason { margin-top: 3px; } table.subs details summary { cursor: pointer; color: var(--accent); font-size: 12px; }
+table.subs .src { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 99px; font-size: 11px; background: #0b0a0f; border: 1px solid var(--line); color: var(--muted); vertical-align: 1px; }
+table.subs .src.preview { color: var(--warn); border-color: rgba(255,181,71,.4); }
+table.subs .actions { display: flex; gap: 6px; } table.subs .actions button { padding: 5px 9px; font-size: 12px; }
+table.subs .mono { font-family: var(--mono); font-size: 12px; }

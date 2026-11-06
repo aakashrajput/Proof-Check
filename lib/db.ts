@@ -152,5 +152,10 @@ export type Submission = {
   sha256_2: string | null; scpn: string | null; video_id_read: string | null; frames_total: number | null;
   frames_dropped: number | null; fps: number | null; watch_seconds: number | null; status: string;
   reason: string; payout_code: string | null; raw_json: string | null; created_at: string;
-  text_sha256: string | null; source: string | null; played_seconds: number | null; variant_id: number | null; attested: string | null;
+  text_sha256: string | null; source: string | null; played_seconds: number | null; variant_id: number | null; attested: string | null; attempts: number; updated_at: string | null;
 };
+
+/** 124 → "2:04" */
+export function mmss(sec: number) { sec = Math.max(0, Math.round(sec)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`; }
+/** 176 → "2 min 56 s" */
+export function humanDur(sec: number) { sec = Math.max(0, Math.round(sec)); const m = Math.floor(sec / 60), s = sec % 60; return m ? (s ? `${m} min ${s} s` : `${m} min`) : `${s} s`; }

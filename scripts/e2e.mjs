@@ -88,10 +88,10 @@ ok(denied === 404, "another user cannot open someone else's campaign (404)");
 const page2 = await fetch(`${base}/t/${slug}`).then((r) => r.text());
 ok((page.includes("kw one")) !== (page2.includes("kw one")), "keyword rotates between visits");
 
-async function submit(bytes, mockOverride, text, variantId, attested = "like,subscribe,comment") {
+async function submit(bytes, mockOverride, text, variantId, attested = "like,subscribe,comment", worker = "tester") {
   // The server reads GEMINI_MOCK_JSON from env; we vary the *image bytes* and rely on a per-request header hook below.
   const fd = new FormData();
-  fd.set("slug", slug); fd.set("src", "sg"); fd.set("worker_ref", "tester");
+  fd.set("slug", slug); fd.set("src", "sg"); if (worker) fd.set("worker_ref", worker);
   if (attested) fd.set("attested", attested);
   if (variantId) fd.set("variant_id", String(variantId));
   if (text) fd.set("text", text);
@@ -99,6 +99,7 @@ async function submit(bytes, mockOverride, text, variantId, attested = "like,sub
   const r = await fetch(`${base}/api/verify`, { method: "POST", body: fd, headers: mockOverride ? { "x-mock-read": JSON.stringify(mockOverride) } : {} });
   return r.json();
 }
+const fresh = () => Math.random().toString(36).slice(2, 10).toUpperCase() + "k9Rt3VbN";
 const png = (tag) => Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.from(tag)]);
 const good = { has_stats_panel: true, video_id: VIDEO, scpn: "AAAA BBBB CCCC DDDD", frames_dropped: 3, frames_total: 4500, fps: 30, platform: "android", looks_edited: false, confidence: 0.95 };
 
@@ -113,11 +114,21 @@ r = await submit(png("a"), good);
 ok(r.reason === "duplicate_screenshot", "same bytes rejected as duplicate");
 r = await submit(png("b"), { ...good });
 ok(r.reason === "reused_playback", "same sCPN with new bytes rejected as reused playback");
+// a worker who watches more on the SAME playback updates their earlier failed row instead of adding one
+const before = Number((await db.execute({ sql: "SELECT COUNT(*) n FROM submissions WHERE campaign_id=?", args: [cid] })).rows[0].n);
+let r1 = await submit(png("w1"), { ...good, scpn: "SAMEPLAY1", frames_total: 1800 });
+let r2 = await submit(png("w2"), { ...good, scpn: "SAMEPLAY1", frames_total: 2700 });
+const after = Number((await db.execute({ sql: "SELECT COUNT(*) n FROM submissions WHERE campaign_id=?", args: [cid] })).rows[0].n);
+const row = (await db.execute({ sql: "SELECT attempts, watch_seconds, status FROM submissions WHERE id=?", args: [r2.submission_id] })).rows[0];
+ok(r1.reason === "insufficient_watch_time" && r2.reason === "insufficient_watch_time" && r1.submission_id === r2.submission_id && after - before === 1 && Number(row.attempts) === 2 && Math.round(Number(row.watch_seconds)) === 90, `same playback retry updates the row (1 row, 2 attempts, 90 s)`);
+ok(/30 s more \(30 s\)/.test(r2.message) && /1:30/.test(r2.message) && /2:00/.test(r2.message), `watch-time message uses m:ss and 'X min Y s more (N s)': ${r2.message.slice(0, 90)}…`);
+let r3 = await submit(png("w3"), { ...good, scpn: "SAMEPLAY1", frames_total: 4000 });
+ok(r3.status === "pass" && r3.submission_id === r2.submission_id, "third try on same playback passes and completes the same row");
 r = await submit(png("c"), { ...good, scpn: "NEWNONCE1", video_id: "xxxxxxxxxxx" });
 ok(r.reason === "wrong_video", "wrong video id rejected");
 r = await submit(png("d"), { ...good, scpn: "NEWNONCE2", frames_total: 900 });
 ok(r.reason === "insufficient_watch_time", "900 frames @30fps = 30s < 120s rejected");
-ok(Array.isArray(r.checks) && r.checks.some((c) => c.key === "watch" && c.state === "fail" && /90 s more/.test(c.detail)) && r.checks.some((c) => c.key === "video" && c.state === "ok") && /Keep the video playing/.test(r.fix), "fail result carries per-rule checks (video ✓, watch ✗ with '90 s more') and a fix");
+ok(Array.isArray(r.checks) && r.checks.some((c) => c.key === "watch" && c.state === "fail" && /1 min 30 s more \(90 s\)/.test(c.detail)) && r.checks.some((c) => c.key === "video" && c.state === "ok") && /Keep the video playing/.test(r.fix), "fail result carries per-rule checks (video ✓, watch ✗ with '90 s more') and a fix");
 r = await submit(png("e"), { ...good, scpn: "NEWNONCE3", has_stats_panel: false, video_id: null, scpn: null });
 ok(r.reason === "panel_missing", "no panel rejected");
 r = await submit(png("f"), { ...good, scpn: "NEWNONCE4", looks_edited: true, confidence: 0.9 });
@@ -141,11 +152,25 @@ const firstText = dbg();
 r = await submit(null, null, firstText);
 ok(r.status === "pass" && r.details.source === "text" && Math.round(r.details.watch_seconds) === 150, `text-only debug info passes (150s via vpl), code ${r.payout_code}`);
 r = await submit(null, null, firstText);
-ok(r.reason === "duplicate_text", "same text rejected as duplicate");
+ok(r.reason === "duplicate_text", "same text as a PAID proof rejected as duplicate");
+const shortText = dbg({ cpn: fresh(), vct: "40.000", cmt: "40.000", vpl: "0.000-40.000", totalVideoFrames: 1200 });
+r = await submit(null, null, shortText);
+ok(r.reason === "insufficient_watch_time", "short watch via text fails");
+const rr = await submit(null, null, shortText);
+const rowcount = Number((await db.execute({ sql: "SELECT attempts FROM submissions WHERE id=?", args: [r.submission_id] })).rows[0].attempts);
+ok(rr.reason === "insufficient_watch_time" && /Same text as your last attempt/.test(rr.message) && /0:40/.test(rr.message) && rr.submission_id === r.submission_id && rowcount === 2, "re-pasting the same failed text repeats the verdict with guidance and bumps attempts (no new row)");
+// truncated JSON (clipboard cut off) still parses
+const full = dbg({ cpn: fresh() });
+const cut = full.slice(0, full.indexOf('"debug_videoId"'));
+r = await submit(null, null, cut);
+ok(r.status === "pass", `truncated debug-info JSON still verifies (${r.reason})`);
+// key=value style
+r = await submit(null, null, `cpn=${fresh()}&docid=${VIDEO}&vct=150.4&vd=212.1&vpl=0.000-150.400`);
+ok(r.status === "pass", "query-string style debug info parses");
 r = await submit(null, null, dbg({ timestamp: Date.now() + 1 }));
 ok(r.reason === "reused_playback", "re-copied text with same cpn rejected as reused playback");
 r = await submit(null, null, dbg({ cpn: "Aa1Bb2Cc3Dd4Ee5F", vct: "200.000", vpl: "0.000-30.000,170.000-200.000" }));
-ok(r.reason === "insufficient_watch_time" && /~60s/.test(r.message), "skipped-through video: vpl sums to 60s < 120s even though playhead is 200s");
+ok(r.reason === "insufficient_watch_time" && /watched 1:00/.test(r.message) && /1 min more \(60 s\)/.test(r.message), "skipped-through video: vpl sums to 60s < 120s even though playhead is 200s");
 r = await submit(null, null, dbg({ cpn: "Bb1Bb2Cc3Dd4Ee5F", docid: "xxxxxxxxxxx", debug_videoId: "xxxxxxxxxxx" }));
 ok(r.reason === "wrong_video", "text with wrong docid rejected");
 r = await submit(null, null, dbg({ cpn: "Cc1Bb2Cc3Dd4Ee5F", timestamp: Date.now() - 48 * 3600e3, debug_date: undefined }));
@@ -154,6 +179,10 @@ r = await submit(null, null, dbg({ cpn: "Dd1Bb2Cc3Dd4Ee5F", vpl: "0.000-500.000"
 ok(r.reason === "text_invalid", "played > duration rejected as tampered");
 r = await submit(null, null, "hello i watched the video pls approve");
 ok(r.reason === "text_unreadable", "free text rejected as unreadable");
+const unread = (await db.execute({ sql: "SELECT raw_json FROM submissions WHERE id=?", args: [r.submission_id] })).rows[0].raw_json;
+ok(/unreadable sample: hello i watched/.test(String(unread)), "unreadable paste keeps a short sample for diagnosis");
+r = await submit(png("nw"), good, null, null, "like,subscribe,comment", "");
+ok(r.error && /worker username/i.test(r.error), "missing worker id is rejected (400)");
 r = await submit(null, null, `Video ID / sCPN  ${VIDEO} / EE1B B2CC 3DD4 EE5F\nViewport / Frames  1280x720*2.00 / 2 dropped of 4200\nCurrent / Optimal Res  1280x720@30 / 1280x720@30`);
 ok(r.status === "pass" && Math.round(r.details.watch_seconds) === 140, "pasted panel lines parse (4200 frames @30 = 140s)");
 r = await submit(png("m1"), { ...good, scpn: "Ff1Bb2Cc3Dd4Ee5F" }, dbg({ cpn: "Gg1Bb2Cc3Dd4Ee5F" }));

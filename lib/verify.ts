@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "crypto";
-import { one, run, type Campaign, type Submission } from "./db";
+import { one, run, mmss, humanDur, type Campaign, type Submission } from "./db";
 import { readPanel, type PanelRead } from "./gemini";
 import { parseDebugText, textWatchSeconds, type TextRead } from "./debugtext";
 
@@ -39,11 +39,13 @@ function buildChecks(c: Campaign, ctx: Ctx, status: string, reason: string): Che
     detail: reason === "edited_screenshot" ? "text looks pasted or edited" : reason === "possible_edit" ? "needs a human look" : undefined });
   if (minS > 0 || minF > 0) {
     const need = minS > 0 ? `${minS} s` : `${minF} frames`;
-    const got = ctx.watch != null ? `~${Math.round(ctx.watch)} s` : ctx.frames_total != null ? `${ctx.frames_total} frames` : null;
+    const got = ctx.watch != null ? `${mmss(ctx.watch)}` : ctx.frames_total != null ? `${ctx.frames_total} frames` : null;
     const enough = status === "pass" || (ctx.watch != null && minS > 0 && ctx.watch >= minS) || (ctx.frames_total != null && minF > 0 && ctx.frames_total >= minF && !(minS > 0 && ctx.watch != null && ctx.watch < minS));
     const state: Check["state"] = reason === "insufficient_watch_time" ? "fail" : got == null ? "unknown" : enough ? "ok" : "unknown";
-    let detail = got ? `${got} played, needs ${need}` : `needs ${need} — couldn't read how long you watched`;
-    if (state === "fail" && ctx.watch != null && minS > 0) detail += ` — keep it playing ${Math.max(1, Math.ceil(minS - ctx.watch))} s more, then copy fresh debug info`;
+    const gotTxt = ctx.watch != null ? `${mmss(ctx.watch)} watched` : got;
+    const needTxt = minS > 0 ? `needs ${mmss(minS)}` : `needs ${need}`;
+    let detail = gotTxt ? `${gotTxt} · ${needTxt}` : `${needTxt} — couldn't read how long you watched`;
+    if (state === "fail" && ctx.watch != null && minS > 0) { const more = Math.max(1, Math.ceil(minS - ctx.watch)); detail += ` · ${humanDur(more)} more (${more} s), then copy fresh debug info`; }
     out.push({ key: "watch", label: "Watch time", state, detail });
   }
   return out;
@@ -86,7 +88,7 @@ type Ctx = {
   sha: string; sha2: string | null; text_sha: string | null; source: "screenshot" | "text" | "both";
   read?: PanelRead; text?: TextRead;
   video_id?: string | null; scpn?: string | null; frames_total?: number | null; frames_dropped?: number | null; fps?: number | null;
-  watch?: number | null; played?: number | null;
+  watch?: number | null; played?: number | null; note?: string;
 };
 
 export async function verifySubmission(
@@ -124,16 +126,32 @@ export async function verifySubmission(
     if (dupe) return fail(campaign, meta, ctx, "duplicate_screenshot", "This exact screenshot was already submitted.");
   }
   if (hasText) {
-    const dupe = await one<Submission>("SELECT id FROM submissions WHERE text_sha256 = ? LIMIT 1", [ctx.text_sha]);
-    if (dupe) return fail(campaign, meta, ctx, "duplicate_text", "This exact debug info was already submitted.");
+    const dupe = await one<Submission>("SELECT * FROM submissions WHERE text_sha256 = ? ORDER BY id DESC LIMIT 1", [ctx.text_sha]);
+    if (dupe && dupe.status === "pass") return fail(campaign, meta, ctx, "duplicate_text", "This exact debug info was already used for a payout. Watch again and copy fresh debug info.");
+    if (dupe && dupe.campaign_id === campaign.id) {
+      // Same text as a previous failed attempt: nothing new to check. Repeat the verdict with concrete guidance.
+      await run("UPDATE submissions SET attempts = attempts + 1, updated_at = datetime('now'), worker_ref = COALESCE(?, worker_ref) WHERE id = ?", [meta.worker_ref ?? null, dupe.id]);
+      const minS = campaign.min_seconds || 0;
+      let msg = "This is the same text as your last attempt, so nothing has changed.";
+      if (dupe.reason === "insufficient_watch_time" && dupe.watch_seconds != null && minS > 0) {
+        const more = Math.max(1, Math.ceil(minS - dupe.watch_seconds));
+        msg = `Same text as your last attempt — you had watched ${mmss(dupe.watch_seconds)}, this task needs ${mmss(minS)}. Keep the video playing ${humanDur(more)} more (${more} s), then tap Copy debug info AGAIN and paste the new text.`;
+      } else if (dupe.reason === "wrong_video") msg = "Same text as your last attempt — it's still from the wrong video. Open the correct video, watch it, then copy fresh debug info.";
+      else msg += " Watch the video, then tap Copy debug info again — each copy is different — and paste the new text.";
+      ctx.text = parseDebugText(text); ctx.video_id = ctx.text.video_id; ctx.scpn = ctx.text.scpn; ctx.watch = dupe.watch_seconds; ctx.frames_total = dupe.frames_total;
+      return { status: "fail", reason: dupe.reason, message: msg, details: details(ctx), checks: buildChecks(campaign, ctx, "fail", dupe.reason), fix: FIX[dupe.reason] ?? FIX.insufficient_watch_time, submission_id: dupe.id };
+    }
+    if (dupe) return fail(campaign, meta, ctx, "duplicate_text", "This exact debug info was already submitted to another task.");
   }
 
   // 2a. Text proof (cheap, exact)
   if (hasText) {
     const t = parseDebugText(text);
     ctx.text = t;
-    if (t.problems.includes("unrecognized") || t.problems.includes("no_video_id") || t.problems.includes("no_cpn"))
-      return fail(campaign, meta, ctx, "text_unreadable", "The pasted text isn't YouTube debug info. In the player open ⋮ → Stats for nerds → 'Copy debug info', then paste the whole thing.");
+    if (t.problems.includes("unrecognized") || t.problems.includes("no_video_id") || t.problems.includes("no_cpn")) {
+      ctx.note = `unreadable sample: ${text.slice(0, 240).replace(/\s+/g, " ")}`;
+      return fail(campaign, meta, ctx, "text_unreadable", "The pasted text isn't complete YouTube debug info. Open ⋮ → Stats for nerds → tap 'Copy debug info', then paste ALL of it (it starts with {\"ns\":\"yt\" and is ~1,500 characters).");
+    }
     if (t.problems.includes("bad_video_id") || t.problems.includes("bad_cpn") || t.problems.includes("played_gt_duration") || t.problems.includes("vct_gt_duration"))
       return fail(campaign, meta, ctx, "text_invalid", "The debug info looks altered or incomplete. Copy it again without editing.");
     if (t.timestamp_ms && TEXT_MAX_AGE_H > 0 && Date.now() - t.timestamp_ms > TEXT_MAX_AGE_H * 3600_000)
@@ -187,7 +205,8 @@ export async function verifySubmission(
     if (ctx.watch == null) {
       if (!(minFrames > 0 && ctx.frames_total != null)) return review(campaign, meta, ctx, "watch_time_unreadable", "We could not determine the watch time; sent for manual review.");
     } else if (ctx.watch < minSeconds) {
-      return fail(campaign, meta, ctx, "insufficient_watch_time", `Only ~${Math.round(ctx.watch)}s watched (minimum ${minSeconds}s). Keep the video playing longer, then submit fresh proof.`);
+      const more = Math.max(1, Math.ceil(minSeconds - ctx.watch));
+      return fail(campaign, meta, ctx, "insufficient_watch_time", `You watched ${mmss(ctx.watch)} — this task needs ${mmss(minSeconds)}. Keep the video playing ${humanDur(more)} more (${more} s), then copy fresh debug info and paste it here.`);
     }
   }
   if (minFrames > 0) {
@@ -208,7 +227,7 @@ function details(ctx: Ctx) {
 }
 
 async function fail(c: Campaign, meta: Meta, ctx: Ctx, reason: string, message: string): Promise<VerifyResult> {
-  const id = await insert(c, meta, ctx, "fail", reason, null);
+  const id = await insert(c, meta, ctx, "fail", reason, null, ctx.note);
   await run("INSERT INTO events (campaign_id, kind, src) VALUES (?, 'rejected', ?)", [c.id, meta.src ?? null]);
   return { status: "fail", reason, message, details: details(ctx), checks: buildChecks(c, ctx, "fail", reason), fix: FIX[reason], submission_id: id };
 }
@@ -219,6 +238,21 @@ async function review(c: Campaign, meta: Meta, ctx: Ctx, reason: string, message
 }
 
 async function insert(c: Campaign, meta: Meta, ctx: Ctx, status: string, reason: string, code: string | null, note?: string): Promise<number> {
+  // Keep one row per playback attempt: a worker who watches more and re-copies the debug info (same cpn)
+  // updates their earlier failed row instead of stacking new ones. Rows with a payout code are never touched.
+  let prior: { id: number } | null = null;
+  if (ctx.scpn) prior = await one<{ id: number }>("SELECT id FROM submissions WHERE campaign_id = ? AND scpn = ? AND status != 'pass' ORDER BY id DESC LIMIT 1", [c.id, ctx.scpn]);
+  else if (meta.worker_ref) prior = await one<{ id: number }>("SELECT id FROM submissions WHERE campaign_id = ? AND worker_ref = ? AND scpn IS NULL AND status != 'pass' AND created_at > datetime('now', '-6 hours') ORDER BY id DESC LIMIT 1", [c.id, meta.worker_ref]);
+  if (prior) {
+    await run(
+      `UPDATE submissions SET worker_ref = COALESCE(?, worker_ref), src = COALESCE(?, src), sha256 = ?, sha256_2 = ?, text_sha256 = ?, source = ?, scpn = ?, video_id_read = ?,
+         frames_total = ?, frames_dropped = ?, fps = ?, watch_seconds = ?, played_seconds = ?, status = ?, reason = ?, payout_code = ?, raw_json = ?,
+         attempts = attempts + 1, updated_at = datetime('now') WHERE id = ?`,
+      [meta.worker_ref ?? null, meta.src ?? null, ctx.sha || null, ctx.sha2, ctx.text_sha, ctx.source, ctx.scpn ?? null, ctx.video_id ?? null,
+       ctx.frames_total ?? null, ctx.frames_dropped ?? null, ctx.fps ?? null, ctx.watch ?? null, ctx.played ?? null, status, reason, code,
+       JSON.stringify({ read: ctx.read ?? null, text: ctx.text ?? null, note: note ?? null }), prior.id]);
+    return prior.id;
+  }
   const res = await run(
     `INSERT INTO submissions (campaign_id, worker_ref, src, sha256, sha256_2, text_sha256, source, scpn, video_id_read, frames_total, frames_dropped, fps, watch_seconds, played_seconds, status, reason, payout_code, raw_json)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

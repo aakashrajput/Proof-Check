@@ -26,6 +26,9 @@ export async function POST(req: Request) {
   if (!c) return NextResponse.json({ error: "Unknown task" }, { status: 404 });
   if (c.status !== "active") return NextResponse.json({ error: "This task is closed" }, { status: 410 });
 
+  const workerRef = String(fd.get("worker_ref") ?? "").trim().slice(0, 80);
+  if (workerRef.length < 2) return NextResponse.json({ error: "Enter your worker username / ID so the employer can match your task." }, { status: 400 });
+
   // Required self-confirmations (like / subscribe / comment) — enforced server-side too.
   const required = parseAttest(c.attest);
   const attested = parseAttest(String(fd.get("attested") ?? ""));
@@ -40,7 +43,7 @@ export async function POST(req: Request) {
 
   try {
     const result = await verifySubmission(c, files,
-      { worker_ref: (fd.get("worker_ref") as string) || null, src: (fd.get("src") as string) || null, mock: req.headers.get("x-mock-read") },
+      { worker_ref: workerRef, src: (fd.get("src") as string) || null, mock: req.headers.get("x-mock-read") },
       (fd.get("text") as string) || null);
     if (attested.length && result.submission_id) await run("UPDATE submissions SET attested = ? WHERE id = ?", [attested.join(","), result.submission_id]);
     const variantId = Number(fd.get("variant_id")) || 0;

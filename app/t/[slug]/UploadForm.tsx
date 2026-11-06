@@ -28,7 +28,8 @@ export default function UploadForm({ slug, src, workerRef, disabled, mode, varia
   const showFiles = mode !== "text", showText = mode !== "screenshot";
   const proofOk = mode === "both" ? files.length > 0 && text.trim().length > 0
     : mode === "text" ? text.trim().length > 0 : mode === "screenshot" ? files.length > 0 : files.length > 0 || text.trim().length > 0;
-  const canSubmit = proofOk && attestOk;
+  const workerOk = wref.trim().length >= 2;
+  const canSubmit = proofOk && attestOk && workerOk;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -120,11 +121,12 @@ export default function UploadForm({ slug, src, workerRef, disabled, mode, varia
           <p className="small muted" style={{ margin: "6px 0 0" }}>The employer spot-checks these on YouTube. A false confirmation means the task is declined and you won't be paid.</p>
         </div>
       )}
-      <label>Your worker ID / username (optional, helps the employer find you)</label>
-      <input value={wref} onChange={(e) => setWref(e.target.value)} placeholder="e.g. your SproutGigs username" />
+      <label>Your worker username / ID <span className="bad">*</span> <span className="muted">— exactly as shown on the job site, so your task can be matched</span></label>
+      <input value={wref} onChange={(e) => setWref(e.target.value)} placeholder="e.g. your SproutGigs username" required minLength={2} autoComplete="username" />
       <div style={{ marginTop: 12 }}>
         <button type="submit" disabled={busy || disabled || !canSubmit}>{busy ? "Verifying…" : "Verify proof"}</button>
-        {!attestOk && proofOk && <span className="small muted" style={{ marginLeft: 10 }}>Tick all confirmations above to continue.</span>}
+        {proofOk && !workerOk && <span className="small muted" style={{ marginLeft: 10 }}>Enter your worker username to continue.</span>}
+        {proofOk && workerOk && !attestOk && <span className="small muted" style={{ marginLeft: 10 }}>Tick all confirmations above to continue.</span>}
       </div>
       {err && <div className="result fail">Error: {err}</div>}
       {res && (
@@ -156,7 +158,7 @@ export default function UploadForm({ slug, src, workerRef, disabled, mode, varia
               <b>What this means:</b> the employer will look at it by hand, which can take a while. {res.fix ?? ""} If you can, paste the "Copy debug info" text for an instant result instead.
             </div>
           )}
-          {res.details?.source && <p className="small muted" style={{ marginTop: 8 }}>checked via {res.details.source}</p>}
+          {res.details?.source && <p className="small muted" style={{ marginTop: 8 }}>checked via {res.details.source}{res.details?.watch_seconds != null ? ` · ${Math.round(res.details.watch_seconds)} s watched so far` : ""}</p>}
         </div>
       )}
     </form>

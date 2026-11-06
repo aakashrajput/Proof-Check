@@ -52,8 +52,36 @@ export function parseDebugText(input: string): TextRead {
     } catch { /* fall through to line parsing */ }
   }
 
+  // 1b. Broken / truncated JSON: pull fields out with regexes even when JSON.parse fails
+  if (out.format !== "json" && /"(docid|cpn|debug_videoId|vct|vpl)"\s*:/.test(text)) {
+    out.format = "json";
+    const g = (k: string) => text.match(new RegExp(`"${k}"\\s*:\\s*"?([^",}]*)`))?.[1]?.trim() ?? null;
+    const n = (k: string) => { const v = g(k); if (v == null || v === "") return null; const x = Number(v); return Number.isFinite(x) ? x : null; };
+    out.video_id = g("docid") ?? g("debug_videoId") ?? g("videoId");
+    out.scpn = g("cpn");
+    out.frames_total = n("totalVideoFrames") ?? n("totalFrames");
+    out.frames_dropped = n("droppedVideoFrames") ?? n("droppedFrames");
+    out.vct = n("vct") ?? n("cmt"); out.duration = n("vd") ?? n("len");
+    out.played_seconds = sumRanges(g("vpl"));
+    out.timestamp_ms = n("timestamp");
+    const itag = n("fmt"); if (itag != null) out.fps = FPS60.has(itag) ? 60 : 30;
+    out.problems.push("truncated_json");
+  }
+
+  // 1c. key=value / key: value formats (query strings, some app builds)
+  if (out.format !== "json" && /(^|[&\s])(cpn|docid|video_?id)\s*[:=]/i.test(text)) {
+    out.format = "lines";
+    const kv = (k: string) => text.match(new RegExp(`(?:^|[&\\s,;])${k}\\s*[:=]\\s*"?([A-Za-z0-9_\\-.:]+)`, "i"))?.[1] ?? null;
+    out.video_id = kv("docid") ?? kv("video_?id") ?? kv("debug_videoId");
+    out.scpn = kv("s?cpn");
+    const vct = kv("vct") ?? kv("cmt"); if (vct) out.vct = Number(vct) || null;
+    const vd = kv("vd") ?? kv("len"); if (vd) out.duration = Number(vd) || null;
+    out.played_seconds = sumRanges(text.match(/(?:^|[&\s,;])vpl\s*[:=]\s*"?([\d.\-,]+)/i)?.[1] ?? null);
+    const tf = kv("totalVideoFrames"); if (tf) out.frames_total = Number(tf) || null;
+  }
+
   // 2. Panel lines (manual paste / mobile copy)
-  if (out.format !== "json") {
+  if (out.format !== "json" && !(out.video_id && out.scpn)) {
     out.format = "lines";
     const m1 = text.match(/Video\s*ID\s*\/\s*s?CPN\s*:?\s*([A-Za-z0-9_-]{11})\s*\/\s*([A-Za-z0-9 _-]{12,40})/i);
     if (m1) { out.video_id = m1[1]; out.scpn = m1[2].replace(/\s+/g, ""); }
@@ -61,7 +89,7 @@ export function parseDebugText(input: string): TextRead {
     if (m2) { out.frames_dropped = Number(m2[1]); out.frames_total = Number(m2[2]); }
     const m3 = text.match(/\d{3,4}\s*x\s*\d{3,4}\s*@\s*(\d{2,3})/);
     if (m3) out.fps = Number(m3[1]);
-    if (!m1 && !m2) out.problems.push("unrecognized");
+    if (!m1 && !m2 && !out.video_id) out.problems.push("unrecognized");
   }
 
   if (out.scpn) out.scpn = out.scpn.replace(/\s+/g, "");
