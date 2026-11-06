@@ -9,7 +9,67 @@ export type VerifyResult = {
   message: string;         // worker-facing explanation
   payout_code?: string;
   details: { video_id?: string | null; scpn?: string | null; frames_total?: number | null; watch_seconds?: number | null; source?: string };
+  checks: Check[];         // per-rule breakdown for the worker
+  fix?: string;            // what to do next (fail/review only)
   submission_id: number;
+};
+
+export type Check = { key: string; label: string; state: "ok" | "fail" | "unknown"; detail?: string };
+
+/** Per-rule breakdown shown to the worker so they know exactly what passed and what to fix. */
+function buildChecks(c: Campaign, ctx: Ctx, status: string, reason: string): Check[] {
+  const minS = c.min_seconds || 0, minF = c.min_frames || 0;
+  const out: Check[] = [];
+  const readable = !!(ctx.video_id && ctx.scpn);
+  out.push({ key: "readable", label: "Proof readable", state: readable ? "ok" : "fail",
+    detail: readable ? (ctx.source === "text" ? "debug info parsed" : ctx.source === "both" ? "debug info + screenshot" : "panel read from screenshot")
+      : ["duplicate_screenshot", "duplicate_text"].includes(reason) ? "this exact proof was already submitted"
+      : reason === "text_unreadable" ? "pasted text isn't YouTube debug info"
+      : reason === "text_invalid" ? "debug info is altered or incomplete"
+      : reason === "panel_missing" ? "Stats for nerds panel not visible / cropped"
+      : reason === "ocr_error" ? "screenshot could not be read automatically" : "no usable proof" });
+  if (ctx.source === "both") out.push({ key: "consistent", label: "Screenshot and text match", state: reason === "proof_mismatch" ? "fail" : readable ? "ok" : "unknown",
+    detail: reason === "proof_mismatch" ? "they come from different playbacks" : undefined });
+  out.push({ key: "video", label: "Right video", state: !ctx.video_id ? "unknown" : ctx.video_id === c.video_id ? "ok" : "fail",
+    detail: ctx.video_id && ctx.video_id !== c.video_id ? `proof is from ${ctx.video_id}, task is ${c.video_title ?? c.video_id}` : ctx.video_id ? c.video_title ?? c.video_id : "not readable" });
+  const freshFail = ["reused_playback", "stale_proof", "duplicate_screenshot", "duplicate_text"].includes(reason);
+  out.push({ key: "fresh", label: "Fresh playback session", state: freshFail ? "fail" : ctx.scpn ? "ok" : "unknown",
+    detail: reason === "reused_playback" ? "this playback was already paid once" : reason === "stale_proof" ? "debug info is too old" : freshFail ? "already submitted" : ctx.scpn ? "first time seen" : undefined });
+  if (ctx.source !== "text") out.push({ key: "untampered", label: "Screenshot unaltered", state: ["edited_screenshot"].includes(reason) ? "fail" : ["possible_edit", "low_confidence"].includes(reason) ? "unknown" : ctx.read?.has_stats_panel ? "ok" : "unknown",
+    detail: reason === "edited_screenshot" ? "text looks pasted or edited" : reason === "possible_edit" ? "needs a human look" : undefined });
+  if (minS > 0 || minF > 0) {
+    const need = minS > 0 ? `${minS} s` : `${minF} frames`;
+    const got = ctx.watch != null ? `~${Math.round(ctx.watch)} s` : ctx.frames_total != null ? `${ctx.frames_total} frames` : null;
+    const enough = status === "pass" || (ctx.watch != null && minS > 0 && ctx.watch >= minS) || (ctx.frames_total != null && minF > 0 && ctx.frames_total >= minF && !(minS > 0 && ctx.watch != null && ctx.watch < minS));
+    const state: Check["state"] = reason === "insufficient_watch_time" ? "fail" : got == null ? "unknown" : enough ? "ok" : "unknown";
+    let detail = got ? `${got} played, needs ${need}` : `needs ${need} — couldn't read how long you watched`;
+    if (state === "fail" && ctx.watch != null && minS > 0) detail += ` — keep it playing ${Math.max(1, Math.ceil(minS - ctx.watch))} s more, then copy fresh debug info`;
+    out.push({ key: "watch", label: "Watch time", state, detail });
+  }
+  return out;
+}
+
+const FIX: Record<string, string> = {
+  no_proof: "Paste the debug info or upload a screenshot.",
+  screenshot_required: "This task needs a screenshot of the Stats for nerds panel.",
+  text_required: "This task needs the 'Copy debug info' text. In the player: ⋮ → Stats for nerds → Copy debug info.",
+  both_required: "This task needs both the screenshot and the debug info text from the same playback.",
+  duplicate_screenshot: "Watch the video again in a fresh session and take a new screenshot. Reusing a screenshot — yours or anyone else's — is always declined.",
+  duplicate_text: "Watch the video again and copy fresh debug info. Re-pasting the same text is always declined.",
+  text_unreadable: "Open the video, tap ⋮ (or right-click the player) → Stats for nerds → Copy debug info, and paste the whole thing without editing.",
+  text_invalid: "Copy the debug info again without changing anything. Edited numbers are detected and declined.",
+  stale_proof: "Watch the video again now and copy fresh debug info — proof must be recent.",
+  panel_missing: "Open Stats for nerds and make sure the 'Video ID / sCPN' and 'Viewport / Frames' lines are fully visible before you screenshot. Or paste the 'Copy debug info' text instead.",
+  proof_mismatch: "Your screenshot and text are from different playbacks. Watch once, then take both from that same session.",
+  reused_playback: "This playback session was already paid. Reload the video (a new session), watch it again, then submit new proof.",
+  wrong_video: "Search the keyword shown above and open the correct video — check the title and channel match before you watch.",
+  edited_screenshot: "Take a clean, unedited screenshot. Altered screenshots are declined.",
+  insufficient_watch_time: "Keep the video playing until you reach the minimum, then copy fresh debug info (or take a new screenshot).",
+  watch_time_unreadable: "We couldn't read how long you watched. Paste the 'Copy debug info' text — it includes exact played time.",
+  frames_unreadable: "The frame count wasn't visible. Paste the 'Copy debug info' text, or retake the screenshot with the 'Viewport / Frames' line visible.",
+  ocr_error: "Automatic reading failed. Paste the 'Copy debug info' text for an instant result.",
+  possible_edit: "This one needs a human look. You can also paste the 'Copy debug info' text for an instant decision.",
+  low_confidence: "The screenshot was hard to read. Paste the 'Copy debug info' text for an instant decision.",
 };
 
 export type ProofMode = "either" | "screenshot" | "text" | "both";
@@ -140,7 +200,7 @@ export async function verifySubmission(
   const id = await insert(campaign, meta, ctx, "pass", "verified", code);
   await run("INSERT INTO codes (code, submission_id, campaign_id) VALUES (?, ?, ?)", [code, id, campaign.id]);
   await run("INSERT INTO events (campaign_id, kind, src) VALUES (?, 'verified', ?)", [campaign.id, meta.src ?? null]);
-  return { status: "pass", reason: "verified", message: "Verified. Paste this code as your proof.", payout_code: code, details: details(ctx), submission_id: id };
+  return { status: "pass", reason: "verified", message: "Verified. Paste this code as your proof.", payout_code: code, details: details(ctx), checks: buildChecks(campaign, ctx, "pass", "verified"), submission_id: id };
 }
 
 function details(ctx: Ctx) {
@@ -150,12 +210,12 @@ function details(ctx: Ctx) {
 async function fail(c: Campaign, meta: Meta, ctx: Ctx, reason: string, message: string): Promise<VerifyResult> {
   const id = await insert(c, meta, ctx, "fail", reason, null);
   await run("INSERT INTO events (campaign_id, kind, src) VALUES (?, 'rejected', ?)", [c.id, meta.src ?? null]);
-  return { status: "fail", reason, message, details: details(ctx), submission_id: id };
+  return { status: "fail", reason, message, details: details(ctx), checks: buildChecks(c, ctx, "fail", reason), fix: FIX[reason], submission_id: id };
 }
 
 async function review(c: Campaign, meta: Meta, ctx: Ctx, reason: string, message: string, note?: string | null): Promise<VerifyResult> {
   const id = await insert(c, meta, ctx, "review", reason, null, note ?? undefined);
-  return { status: "review", reason, message, details: details(ctx), submission_id: id };
+  return { status: "review", reason, message, details: details(ctx), checks: buildChecks(c, ctx, "review", reason), fix: FIX[reason], submission_id: id };
 }
 
 async function insert(c: Campaign, meta: Meta, ctx: Ctx, status: string, reason: string, code: string | null, note?: string): Promise<number> {

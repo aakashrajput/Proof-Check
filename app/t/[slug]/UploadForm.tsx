@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
 
-type Result = { status: "pass" | "fail" | "review"; reason: string; message: string; payout_code?: string;
+type Check = { key: string; label: string; state: "ok" | "fail" | "unknown"; detail?: string };
+type Result = { status: "pass" | "fail" | "review"; reason: string; message: string; payout_code?: string; fix?: string; checks?: Check[];
   details?: { frames_total?: number | null; watch_seconds?: number | null; video_id?: string | null; source?: string } };
 type Mode = "either" | "screenshot" | "text" | "both";
 
@@ -59,21 +60,34 @@ export default function UploadForm({ slug, src, workerRef, disabled, mode }: { s
       </div>
       {err && <div className="result fail">Error: {err}</div>}
       {res && (
-        <div className={`result ${res.status}`}>
-          <b>{res.status === "pass" ? "✓ VERIFIED" : res.status === "fail" ? "✗ NOT VERIFIED" : "⏳ SENT FOR REVIEW"}</b>
+        <div className={`result ${res.status}`} role="status" aria-live="polite">
+          <b>{res.status === "pass" ? "✓ VERIFIED" : res.status === "fail" ? "✗ NOT VERIFIED — don't submit this on the job site yet" : "⏳ SENT FOR REVIEW"}</b>
           <p>{res.message}</p>
+          {res.checks && res.checks.length > 0 && (
+            <ul className="checks">
+              {res.checks.map((k) => (
+                <li key={k.key} className={k.state === "ok" ? "ok" : k.state === "fail" ? "bad" : "unknown"}>
+                  {k.state === "ok" ? "✓" : k.state === "fail" ? "✗" : "?"} {k.label}{k.detail ? <span className="muted"> — {k.detail}</span> : null}
+                </li>
+              ))}
+            </ul>
+          )}
           {res.payout_code && <>
             <div className="code">{res.payout_code}</div>
-            <p className="small muted">Paste this code as your proof on the job page. It works once.</p>
+            <p className="small muted">Paste this code as your proof on the job page. It works once — don't share it.</p>
           </>}
-          {(res.details?.watch_seconds != null || res.details?.frames_total != null) && (
-            <p className="small muted">
-              {res.details?.watch_seconds != null ? `~${Math.round(res.details.watch_seconds)}s watched` : ""}
-              {res.details?.frames_total != null ? ` · ${res.details.frames_total} frames` : ""}
-              {res.details?.source ? ` · via ${res.details.source}` : ""}
-            </p>
+          {res.status === "fail" && (
+            <div className="warnbox">
+              <b>What to do:</b> {res.fix ?? "Fix the item marked ✗ above, then verify again."}
+              <div className="muted" style={{ marginTop: 6 }}>If you submit this proof on the job site as it is, it will be declined and you won't be paid. Verify again here first — it's free to retry.</div>
+            </div>
           )}
-          {res.status === "fail" && <p className="small">Fix the issue above and try again.</p>}
+          {res.status === "review" && (
+            <div className="warnbox">
+              <b>What this means:</b> the employer will look at it by hand, which can take a while. {res.fix ?? ""} If you can, paste the "Copy debug info" text for an instant result instead.
+            </div>
+          )}
+          {res.details?.source && <p className="small muted" style={{ marginTop: 8 }}>checked via {res.details.source}</p>}
         </div>
       )}
     </form>

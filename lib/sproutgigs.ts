@@ -1,14 +1,24 @@
 // SproutGigs employer API client. Docs: https://sproutgigs.com/api/documentation.php
 // Auth: Authorization: Basic base64(USER_ID:API_SECRET). Rate limit: 1 req/s (429 -> wait 10s).
-import { q, one, run, type Campaign } from "./db";
+import { q, one, run, type Campaign, type User } from "./db";
+import { decrypt } from "./auth";
 
 const BASE = "https://sproutgigs.com/api";
 const CODE_RE = /\bpw-[a-f0-9]{8}\b/gi;
 
-function authHeader() {
-  const id = process.env.SG_USER_ID, secret = process.env.SG_API_SECRET;
-  if (!id || !secret) throw new Error("SG_USER_ID / SG_API_SECRET not set");
-  return "Basic " + Buffer.from(`${id}:${secret}`).toString("base64");
+export type SgCreds = { userId: string; secret: string };
+
+/** Per-user credentials (stored encrypted), falling back to SG_USER_ID / SG_API_SECRET env for single-tenant setups. */
+export function sgCredsFor(u: Pick<User, "sg_user_id" | "sg_secret_enc"> | null | undefined): SgCreds | null {
+  if (u?.sg_user_id && u.sg_secret_enc) {
+    try { return { userId: u.sg_user_id, secret: decrypt(u.sg_secret_enc) }; } catch { return null; }
+  }
+  if (process.env.SG_USER_ID && process.env.SG_API_SECRET) return { userId: process.env.SG_USER_ID, secret: process.env.SG_API_SECRET };
+  return null;
+}
+
+function authHeader(c: SgCreds) {
+  return "Basic " + Buffer.from(`${c.userId}:${c.secret}`).toString("base64");
 }
 
 // ---- 1 request/second throttle (process-local) ----
@@ -27,13 +37,13 @@ function throttled<T>(fn: () => Promise<T>): Promise<T> {
 
 type SgResp = { ok?: boolean; message?: string; [k: string]: unknown };
 
-async function call(path: string, opts: { method?: "GET" | "POST"; query?: Record<string, string | number | undefined>; body?: unknown } = {}): Promise<SgResp> {
+async function call(creds: SgCreds, path: string, opts: { method?: "GET" | "POST"; query?: Record<string, string | number | undefined>; body?: unknown } = {}): Promise<SgResp> {
   return throttled(async () => {
     const url = new URL(`${BASE}/${path}`);
     for (const [k, v] of Object.entries(opts.query ?? {})) if (v !== undefined) url.searchParams.set(k, String(v));
     const doFetch = () => fetch(url, {
       method: opts.method ?? "GET",
-      headers: { Authorization: authHeader(), "content-type": "application/json" },
+      headers: { Authorization: authHeader(creds), "content-type": "application/json" },
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
     let res = await doFetch();
@@ -46,19 +56,21 @@ async function call(path: string, opts: { method?: "GET" | "POST"; query?: Recor
   });
 }
 
-// ---- Endpoints ----
-export const sg = {
-  getJob: (job_id: string) => call("jobs/get-job.php", { query: { job_id } }),
-  getJobs: (status?: string, page = 1) => call("jobs/get-jobs.php", { query: { status, page } }),
-  getUnratedTasks: (job_id: string, page = 1) => call("jobs/get-unrated-tasks.php", { query: { job_id, page } }),
-  getRatedTasks: (job_id: string, page = 1) => call("jobs/get-rated-tasks.php", { query: { job_id, page } }),
-  rateTasks: (job_id: string, tasks: { id: string; rating: "ok" | "not_ok" | "revise" }[]) =>
-    call("jobs/rate-multiple-tasks.php", { method: "POST", body: { job_id, tasks } }),
-  pause: (job_id: string) => call("jobs/job-pause.php", { method: "POST", body: { job_id } }),
-  resume: (job_id: string) => call("jobs/job-resume.php", { method: "POST", body: { job_id } }),   // verify path in docs
-  stop: (job_id: string) => call("jobs/job-stop.php", { method: "POST", body: { job_id } }),       // verify path in docs
-  balances: () => call("users/get-balances.php"),
-};
+// ---- Endpoints (bound to one user's credentials) ----
+export function sgFor(creds: SgCreds) {
+  return {
+    getJob: (job_id: string) => call(creds, "jobs/get-job.php", { query: { job_id } }),
+    getJobs: (status?: string, page = 1) => call(creds, "jobs/get-jobs.php", { query: { status, page } }),
+    getUnratedTasks: (job_id: string, page = 1) => call(creds, "jobs/get-unrated-tasks.php", { query: { job_id, page } }),
+    getRatedTasks: (job_id: string, page = 1) => call(creds, "jobs/get-rated-tasks.php", { query: { job_id, page } }),
+    rateTasks: (job_id: string, tasks: { id: string; rating: "ok" | "not_ok" | "revise" }[]) =>
+      call(creds, "jobs/rate-multiple-tasks.php", { method: "POST", body: { job_id, tasks } }),
+    pause: (job_id: string) => call(creds, "jobs/job-pause.php", { method: "POST", body: { job_id } }),
+    resume: (job_id: string) => call(creds, "jobs/job-resume.php", { method: "POST", body: { job_id } }),   // verify path in docs
+    stop: (job_id: string) => call(creds, "jobs/job-stop.php", { method: "POST", body: { job_id } }),       // verify path in docs
+    balances: () => call(creds, "users/get-balances.php"),
+  };
+}
 
 // ---- Defensive extraction of tasks from an unrated-tasks response ----
 type SgTask = { id: string; raw: unknown; text: string };
@@ -79,9 +91,10 @@ export type SyncReport = { campaign: string; job_id: string; seen: number; ok: n
  * Poll one campaign's linked job, match payout codes in proof text, rate.
  * Unmatched policy (SG_UNMATCHED_ACTION): skip (default) | revise | not_ok
  */
-export async function syncCampaign(c: Campaign): Promise<SyncReport> {
+export async function syncCampaign(c: Campaign, creds: SgCreds): Promise<SyncReport> {
   const rep: SyncReport = { campaign: c.name, job_id: c.sg_job_id ?? "", seen: 0, ok: 0, unmatched: 0, skipped: 0, errors: [] };
   if (!c.sg_job_id) return rep;
+  const sg = sgFor(creds);
   const unmatchedAction = (process.env.SG_UNMATCHED_ACTION ?? "skip") as "skip" | "revise" | "not_ok";
 
   let page = 1;
@@ -128,9 +141,17 @@ export async function syncCampaign(c: Campaign): Promise<SyncReport> {
   return rep;
 }
 
-export async function syncAll(): Promise<SyncReport[]> {
-  const cs = await q<Campaign>("SELECT * FROM campaigns WHERE sg_job_id IS NOT NULL AND sg_job_id != '' AND status = 'active'");
+/** Sync every active linked campaign using its owner's credentials. ownerId limits to one user's campaigns. */
+export async function syncAll(ownerId?: number): Promise<SyncReport[]> {
+  const cs = await q<Campaign & { sg_user_id: string | null; sg_secret_enc: string | null }>(
+    `SELECT c.*, u.sg_user_id, u.sg_secret_enc FROM campaigns c LEFT JOIN users u ON u.id = c.owner_id
+     WHERE c.sg_job_id IS NOT NULL AND c.sg_job_id != '' AND c.status = 'active'` + (ownerId ? " AND c.owner_id = ?" : ""),
+    ownerId ? [ownerId] : []);
   const out: SyncReport[] = [];
-  for (const c of cs) out.push(await syncCampaign(c));
+  for (const c of cs) {
+    const creds = sgCredsFor(c);
+    if (!creds) { out.push({ campaign: c.name, job_id: c.sg_job_id ?? "", seen: 0, ok: 0, unmatched: 0, skipped: 0, errors: ["owner has no SproutGigs credentials"] }); continue; }
+    out.push(await syncCampaign(c, creds));
+  }
   return out;
 }

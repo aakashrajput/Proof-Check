@@ -13,20 +13,46 @@ const ok = (cond, msg) => { console.log((cond ? "  ✓ " : "  ✗ ") + msg); if 
 // warm the server so it creates the schema
 await fetch(`${base}/t/__warm__`).catch(() => {});
 
-// login
-const login = await fetch(`${base}/api/admin/login`, { method: "POST", body: new URLSearchParams({ password: pw, next: "/admin" }), redirect: "manual" });
-const cookie = login.headers.get("set-cookie")?.split(";")[0];
-ok(login.status === 303 && cookie?.startsWith("pc_admin="), "admin login sets cookie");
-const noauth = await fetch(`${base}/admin`, { redirect: "manual" });
-ok(noauth.status === 307 || noauth.status === 302, "admin redirects when logged out");
+// landing + accounts
+const home = await fetch(`${base}/`).then((r) => r.text());
+ok(home.includes("Stop paying for views") && home.includes("/register"), "landing page renders with register CTA");
+const noauth = await fetch(`${base}/app`, { redirect: "manual" });
+ok((noauth.status === 307 || noauth.status === 302) && /\/login/.test(noauth.headers.get("location") ?? ""), "/app redirects to /login when signed out");
+const legacy = await fetch(`${base}/admin`, { redirect: "manual" });
+ok(/\/app/.test(legacy.headers.get("location") ?? ""), "/admin redirects to /app");
+const email = `e2e-${randomBytes(3).toString("hex")}@example.com`;
+let r0 = await fetch(`${base}/api/auth/register`, { method: "POST", body: new URLSearchParams({ email, password: "short" }), redirect: "manual" });
+ok(/e=/.test(r0.headers.get("location") ?? ""), "register rejects short password");
+r0 = await fetch(`${base}/api/auth/register`, { method: "POST", body: new URLSearchParams({ email, password: "correct horse battery", name: "E2E" }), redirect: "manual" });
+const cookie = r0.headers.get("set-cookie")?.split(";")[0];
+ok(r0.status === 303 && cookie?.startsWith("pc_session=") && /\/app/.test(r0.headers.get("location") ?? ""), "register creates account, sets session, lands on /app");
+r0 = await fetch(`${base}/api/auth/register`, { method: "POST", body: new URLSearchParams({ email, password: "correct horse battery" }), redirect: "manual" });
+ok(/already%20exists|already\+exists/i.test(r0.headers.get("location") ?? ""), "duplicate email rejected");
+r0 = await fetch(`${base}/api/auth/login`, { method: "POST", body: new URLSearchParams({ email, password: "wrong" }), redirect: "manual" });
+ok(/Wrong/.test(decodeURIComponent(r0.headers.get("location") ?? "")), "login rejects wrong password");
+r0 = await fetch(`${base}/api/auth/login`, { method: "POST", body: new URLSearchParams({ email, password: "correct horse battery", next: "/app/settings" }), redirect: "manual" });
+ok(r0.status === 303 && /\/app\/settings$/.test(r0.headers.get("location") ?? ""), "login honours next=");
+const dash = await fetch(`${base}/app`, { headers: { cookie } }).then((r) => r.text());
+ok(dash.includes("Your campaigns") && dash.includes(email), "dashboard renders for signed-in user");
+const forged = `${cookie.split("=")[1].split(".")[0]}.9999999999.forgedsig`;
+const f = await fetch(`${base}/app`, { headers: { cookie: `pc_session=${forged}` }, redirect: "manual" });
+ok(f.status === 307 || f.status === 302, "forged session cookie is rejected");
+const uid = Number((await db.execute({ sql: "SELECT id FROM users WHERE email=?", args: [email] })).rows[0].id);
 
 // create campaign directly in DB (server action needs RSC plumbing; API path is what workers hit)
 const slug = "T" + randomBytes(3).toString("hex");
-await db.execute({ sql: "INSERT INTO campaigns (slug,name,video_id,min_seconds,keywords) VALUES (?,?,?,?,?)", args: [slug, "e2e", VIDEO, 120, "kw one\nkw two"] });
+await db.execute({ sql: "INSERT INTO campaigns (slug,name,video_id,min_seconds,keywords,owner_id) VALUES (?,?,?,?,?,?)", args: [slug, "e2e", VIDEO, 120, "kw one\nkw two", uid] });
 const cid = Number((await db.execute({ sql: "SELECT id FROM campaigns WHERE slug=?", args: [slug] })).rows[0].id);
 
 const page = await fetch(`${base}/t/${slug}?src=sg`).then((r) => r.text());
 ok(page.includes("kw one") || page.includes("kw two"), "worker page renders a keyword");
+ok(page.includes("what gets a proof declined") && page.includes("2:00 min"), "worker page shows requirements card with min watch time");
+const other = await fetch(`${base}/app/c/${(await db.execute({ sql: "SELECT id FROM campaigns WHERE slug=?", args: [slug] })).rows[0].id}`, { headers: { cookie } }).then((r) => r.status);
+ok(other === 200, "owner can open campaign page");
+const stranger = await fetch(`${base}/api/auth/register`, { method: "POST", body: new URLSearchParams({ email: "x" + email, password: "correct horse battery" }), redirect: "manual" });
+const cookie2 = stranger.headers.get("set-cookie")?.split(";")[0];
+const denied = await fetch(`${base}/app/c/${cid}`, { headers: { cookie: cookie2 } }).then((r) => r.status);
+ok(denied === 404, "another user cannot open someone else's campaign (404)");
 const page2 = await fetch(`${base}/t/${slug}`).then((r) => r.text());
 ok((page.includes("kw one")) !== (page2.includes("kw one")), "keyword rotates between visits");
 
@@ -53,6 +79,7 @@ r = await submit(png("c"), { ...good, scpn: "NEWNONCE1", video_id: "xxxxxxxxxxx"
 ok(r.reason === "wrong_video", "wrong video id rejected");
 r = await submit(png("d"), { ...good, scpn: "NEWNONCE2", frames_total: 900 });
 ok(r.reason === "insufficient_watch_time", "900 frames @30fps = 30s < 120s rejected");
+ok(Array.isArray(r.checks) && r.checks.some((c) => c.key === "watch" && c.state === "fail" && /90 s more/.test(c.detail)) && r.checks.some((c) => c.key === "video" && c.state === "ok") && /Keep the video playing/.test(r.fix), "fail result carries per-rule checks (video ✓, watch ✗ with '90 s more') and a fix");
 r = await submit(png("e"), { ...good, scpn: "NEWNONCE3", has_stats_panel: false, video_id: null, scpn: null });
 ok(r.reason === "panel_missing", "no panel rejected");
 r = await submit(png("f"), { ...good, scpn: "NEWNONCE4", looks_edited: true, confidence: 0.9 });
@@ -105,6 +132,10 @@ const s401 = await fetch(`${base}/api/sproutgigs/sync`);
 ok(s401.status === 401, "sync endpoint rejects anonymous");
 const s200 = await fetch(`${base}/api/sproutgigs/sync`, { headers: { authorization: `Bearer ${process.env.CRON_SECRET || "cron"}` } }).then((r) => r.json());
 ok(s200.ok === true && Array.isArray(s200.reports), "sync endpoint accepts CRON_SECRET (no linked jobs → empty reports)");
+const sUser = await fetch(`${base}/api/sproutgigs/sync`, { headers: { cookie } }).then((r) => r.json());
+ok(sUser.ok === true, "sync endpoint accepts a signed-in user (own campaigns only)");
+const health = await fetch(`${base}/api/health`).then((r) => r.json());
+ok(health.ok && health.db.ok, "health endpoint ok");
 
 const subs = await db.execute({ sql: "SELECT status, COUNT(*) n FROM submissions WHERE campaign_id=? GROUP BY status", args: [cid] });
 console.log("  submissions:", subs.rows.map((x) => `${x.status}=${x.n}`).join(" "));
@@ -112,5 +143,6 @@ await db.execute({ sql: "DELETE FROM submissions WHERE campaign_id=?", args: [ci
 await db.execute({ sql: "DELETE FROM codes WHERE campaign_id=?", args: [cid] });
 await db.execute({ sql: "DELETE FROM events WHERE campaign_id=?", args: [cid] });
 await db.execute({ sql: "DELETE FROM campaigns WHERE id=?", args: [cid] });
+await db.execute({ sql: "DELETE FROM users WHERE email IN (?, ?)", args: [email, "x" + email] });
 console.log(fails ? `\n${fails} FAILED` : "\nALL PASSED");
 process.exit(fails ? 1 : 0);

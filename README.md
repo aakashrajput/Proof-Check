@@ -1,6 +1,7 @@
 # ProofCheck
 
-Self-hosted proof-of-work verifier for paid YouTube watch tasks (SproutGigs, WorkUpJob, Microworkers…).
+Self-hosted, multi-user proof-of-work verifier for paid YouTube watch tasks (SproutGigs, WorkUpJob, Microworkers…).
+Employers register with email + password, create campaigns, and get a task link. Workers need no account.
 Workers prove the watch with YouTube's **Stats for nerds** panel — either the **"Copy debug info"** text (preferred: exact, no AI cost,
 includes true played time) or a **screenshot** (read by Gemini Flash), or both. ProofCheck checks it and hands out a one-time payout code.
 If a SproutGigs job is linked, it rates submissions `ok` automatically when the proof contains a valid code.
@@ -31,13 +32,28 @@ same video ID **and** the same cpn nonce, otherwise `proof_mismatch`.
 
 Anything ambiguous lands in **review**; you approve/reject from the admin page.
 
+## Routes
+
+| Path | Who | What |
+|---|---|---|
+| `/` | public | landing page |
+| `/register`, `/login` | public | email + password accounts (scrypt), 30-day signed session cookie |
+| `/app` | signed in | your campaigns, create new |
+| `/app/c/:id` | owner | task link, funnel, submissions, overrides, pause/close, Sync SproutGigs |
+| `/app/settings` | signed in | name, SproutGigs user ID + API secret (stored AES-GCM encrypted), connection test |
+| `/t/:slug` | public (workers) | requirements, keyword, proof submission, per-rule verdict |
+| `/api/health` | public | diagnostics (names only, no secrets) |
+
 ## Run locally (5 minutes)
 
 ```bash
 npm install
-cp .env.example .env.local      # fill ADMIN_PASSWORD + GEMINI_API_KEY (+ SproutGigs keys if wanted)
-npm run dev                     # http://localhost:3000/admin
+cp .env.example .env.local      # set AUTH_SECRET (any long random string) + GEMINI_API_KEY if you want screenshot proof
+npm run dev                     # http://localhost:3000 → Register
 ```
+
+`AUTH_SECRET` signs sessions and encrypts stored API secrets. If unset, `ADMIN_PASSWORD` is used (legacy deployments keep working).
+Changing it logs everyone out and makes stored SproutGigs secrets unreadable (users re-enter them in Settings).
 
 Optional: `node scripts/seed-demo.mjs` creates a demo campaign at `/t/DEMO1`.
 
@@ -62,7 +78,8 @@ CRON_SECRET=anything BASE_URL=http://localhost:3000 node scripts/poll.mjs 10   #
 
 ## SproutGigs setup
 
-1. SproutGigs → Account Settings → generate API secret. Set `SG_USER_ID` and `SG_API_SECRET`.
+1. SproutGigs → Account Settings → generate API secret. Each user enters their own user ID + secret in **/app/settings**
+   (env `SG_USER_ID` / `SG_API_SECRET` still work as a single-tenant fallback).
 2. Post your job on SproutGigs. In the job description paste the task link from the campaign page
    (`https://your-app/t/SLUG?src=sg`) and ask workers to submit the payout code as proof.
 3. Put the SproutGigs **job ID** in the campaign. Each sync:
@@ -107,6 +124,8 @@ BASE_URL=http://localhost:3000 ADMIN_PASSWORD=x CRON_SECRET=cron node scripts/e2
 ```
 
 `ALLOW_MOCK_HEADER=1` lets the test inject a fake panel read via `x-mock-read`; never set it in production.
+The suite covers accounts (register/login/forged cookie/ownership), every verification rule for text and screenshot proof,
+the per-rule checks the worker sees, proof modes, codes, sync auth and health — 46 checks.
 
 ## Layout
 
@@ -114,7 +133,9 @@ BASE_URL=http://localhost:3000 ADMIN_PASSWORD=x CRON_SECRET=cron node scripts/e2
 app/t/[slug]/          worker task page (+ UploadForm, Copy)
 app/api/verify         screenshot → verification pipeline
 app/api/sproutgigs/sync  cron / poller endpoint
-app/admin              dashboard, campaign detail, login (cookie, ADMIN_PASSWORD)
+app/app                dashboard, campaign detail, settings (per-user, owner-scoped)
+app/login, app/register, app/api/auth   accounts
+lib/auth.ts            scrypt passwords, HMAC session cookie, AES-GCM secret storage
 lib/verify.ts          the rules (merges text + screenshot evidence)
 lib/debugtext.ts       "Copy debug info" / pasted-panel parser
 lib/gemini.ts          Stats-for-nerds screenshot extraction (structured JSON)

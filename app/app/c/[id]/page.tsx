@@ -1,15 +1,22 @@
-import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { one, q, type Campaign, type Submission } from "@/lib/db";
+import { currentUser } from "@/lib/auth";
+import { sgCredsFor } from "@/lib/sproutgigs";
 import { updateCampaign, setStatus, override, syncNow } from "../../actions";
+import Header from "../../Header";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-export default async function CampaignPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CampaignPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ created?: string }> }) {
+  const u = await currentUser();
+  if (!u) redirect("/login");
   const { id } = await params;
-  const c = await one<Campaign>("SELECT * FROM campaigns WHERE id = ?", [Number(id)]);
+  const { created } = await searchParams;
+  const c = await one<Campaign>("SELECT * FROM campaigns WHERE id = ? AND owner_id = ?", [Number(id), u.id]);
   if (!c) notFound();
+  const sgReady = !!sgCredsFor(u);
   const subs = await q<Submission>("SELECT * FROM submissions WHERE campaign_id = ? ORDER BY id DESC LIMIT 300", [c.id]);
   const counts = await one<{ opened: number; submitted: number; verified: number; rejected: number }>(`
     SELECT SUM(kind='opened') opened, SUM(kind='submitted') submitted, SUM(kind='verified') verified, SUM(kind='rejected') rejected FROM events WHERE campaign_id = ?`, [c.id]);
@@ -25,18 +32,20 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
 
   return (
     <div className="wrap">
-      <div className="top"><div className="brand"><Link href="/admin">Proof<span>Check</span></Link> · {c.name}</div>
-        <span className={`pill ${c.status === "active" ? "pass" : c.status === "paused" ? "review" : "fail"}`}>{c.status}</span></div>
+      <Header email={u.email} crumb={c.name} />
+      <div className="top"><span className={`pill ${c.status === "active" ? "pass" : c.status === "paused" ? "review" : "fail"}`}>{c.status}</span></div>
+      {created && <div className="card" style={{ borderColor: "var(--ok)" }}><b>Campaign created.</b> Paste the task link below into your job description. Workers who open it see your keyword, the requirements, and exactly why a proof fails before they submit anything on the job site.</div>}
 
       <div className="card">
         <h3>Task link for workers (paste into the job description)</h3>
-        <div className="kw"><span>{link}?src=sg</span></div>
+        <div className="kw"><span>{link}?src=sg</span><a className="btn secondary" href={`${link}?src=preview`} target="_blank" rel="noreferrer" style={{ whiteSpace: "nowrap" }}>Preview ↗</a></div>
         <p className="small muted">Append <code>?src=wuj</code> for WorkUpJob, <code>&w=USERNAME</code> to prefill a worker id.</p>
         <div className="actions" style={{ marginTop: 10 }}>
           {c.status !== "active" && <form action={setStatus}><input type="hidden" name="id" value={c.id} /><input type="hidden" name="status" value="active" /><button>Resume</button></form>}
           {c.status === "active" && <form action={setStatus}><input type="hidden" name="id" value={c.id} /><input type="hidden" name="status" value="paused" /><button className="secondary">Pause</button></form>}
           {c.status !== "closed" && <form action={setStatus}><input type="hidden" name="id" value={c.id} /><input type="hidden" name="status" value="closed" /><button className="danger">Close</button></form>}
-          {c.sg_job_id && <form action={syncNow}><input type="hidden" name="id" value={c.id} /><button className="secondary">Sync SproutGigs now</button></form>}
+          {c.sg_job_id && <form action={syncNow}><input type="hidden" name="id" value={c.id} /><button className="secondary" title={sgReady ? "" : "Add SproutGigs credentials in Settings"}>Sync SproutGigs now</button></form>}
+          {c.sg_job_id && !sgReady && <span className="small muted" style={{ alignSelf: "center" }}>Add SproutGigs credentials in <Link href="/app/settings">Settings</Link> to enable syncing.</span>}
         </div>
       </div>
 

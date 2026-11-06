@@ -33,3 +33,25 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; } th, td { text
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; } .stat { background: #0b0a0f; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; } .stat b { font-size: 20px; display: block; }
 .term { font-family: var(--mono); font-size: 12.5px; background: #0b0a0f; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; color: #cfc8dd; }
 .inline { display: inline; } .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* landing */
+.hero { padding: 24px 0 8px; max-width: 760px; }
+.eyebrow { font-size: 12px; letter-spacing: .8px; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; }
+.display { font-size: clamp(30px, 5.5vw, 46px); line-height: 1.1; margin: 0 0 14px; letter-spacing: -.5px; text-wrap: balance; }
+.lede { font-size: 17px; color: var(--muted); max-width: 64ch; margin: 0 0 18px; }
+.hero .actions { margin-bottom: 20px; }
+.hero-term { max-width: 520px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 18px 0; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 16px; }
+@media (max-width: 720px) { .grid3, .grid2 { grid-template-columns: 1fr; } }
+.grid3 .card, .grid2 .card { margin: 0; }
+.grid3 h3, .grid2 h3 { color: var(--ink); text-transform: none; letter-spacing: 0; font-size: 15px; }
+.grid3 p { color: var(--muted); font-size: 14px; }
+ol.steps.big li { margin: 10px 0; }
+ul.list { margin: 0; padding-left: 18px; } ul.list li { margin: 4px 0; font-size: 14px; }
+ul.checks { list-style: none; padding: 0; margin: 10px 0 6px; } ul.checks li { padding: 4px 0; }
+ul.checks li.ok { color: var(--ok); } ul.checks li.bad { color: var(--bad); } ul.checks li.unknown { color: var(--warn); }
+.btn { display: inline-block; text-decoration: none; }
+.reqs { margin: 0; padding-left: 18px; } .reqs li { margin: 4px 0; }
+.warnbox { border: 1px solid var(--warn); background: rgba(255,181,71,.08); border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-top: 10px; }
+.tablewrap { overflow-x: auto; }

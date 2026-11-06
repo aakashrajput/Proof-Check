@@ -88,8 +88,10 @@ export type Campaign = {
   id: number; slug: string; name: string; video_id: string; video_title: string | null;
   channel_title: string | null; channel_handle: string | null; min_frames: number; min_seconds: number;
   keywords: string; keyword_cursor: number; instructions: string; sg_job_id: string | null;
-  status: string; created_at: string; proof_mode: "either" | "screenshot" | "text" | "both";
+  status: string; created_at: string; proof_mode: "either" | "screenshot" | "text" | "both"; owner_id: number | null;
 };
+
+export type User = { id: number; email: string; password_hash: string; name: string | null; sg_user_id: string | null; sg_secret_enc: string | null; created_at: string };
 
 export type Submission = {
   id: number; campaign_id: number; worker_ref: string | null; src: string | null; sha256: string;

@@ -33,6 +33,18 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
         {closed && <p style={{ color: "var(--bad)" }}>This task is currently closed.</p>}
       </div>
 
+      <div className="card" style={{ borderColor: "var(--accent)" }}>
+        <h3>Before you start — what gets a proof declined</h3>
+        <ul className="reqs small">
+          <li><b>Wrong video.</b> Proof must come from <b>{c.video_title ?? c.video_id}</b>{c.channel_title ? <> by <b>{c.channel_handle ?? c.channel_title}</b></> : null}.</li>
+          {minTxt && <li><b>Too short.</b> The video must actually play for at least <b>{minTxt}</b>. Skipping ahead doesn't count — played time is read from YouTube's own data.</li>}
+          <li><b>Reused proof.</b> Each playback session can be paid once. Screenshots or debug info shared in groups are detected even after cropping or resizing.</li>
+          <li><b>Edited proof.</b> Altered numbers or pasted text are detected.</li>
+          <li><b>Old proof.</b> Debug info must be copied right after watching.</li>
+        </ul>
+        <p className="small muted" style={{ marginTop: 8 }}>Verify here <b>before</b> you submit on the job site. If this page says NOT VERIFIED, the submission will be declined there too — fix it and re-verify first. Retrying is free.</p>
+      </div>
+
       {keyword && (
         <div className="card">
           <h3>Your search keyword</h3>
