@@ -222,6 +222,14 @@ ok(r.reason === "reused_playback", "a third paste of the same iPhone CPN after p
 r = await submit(null, null, iosText("IosNonce00000002", nowIso()).replaceAll(VIDEO, "xxxxxxxxxxx"), null, "like,subscribe,comment", "ios_03");
 ok(r.reason === "wrong_video", "iPhone paste from the wrong video is rejected before the timer starts");
 
+// Any text proof without watch-time fields (e.g. an Android build without vpl/vct) uses the same two-paste timer
+r = await submit(null, null, JSON.stringify({ cplatform: "mobile", c: "android", cplayer: "PLATYPUS", docid: VIDEO, cpn: "AndroidNoTime001", timestamp: Date.now() }), null, "like,subscribe,comment", "andro_09");
+ok(r.reason === "second_paste_needed" && /This debug info doesn't include watch time/.test(r.message), "JSON without watch-time fields starts the two-paste timer");
+const rawStored = (await db.execute({ sql: "SELECT raw_json FROM submissions WHERE id=?", args: [r.submission_id] })).rows[0].raw_json;
+ok(/"raw":"\{\\"cplatform/.test(String(rawStored)), "raw pasted text is stored for review");
+const cpage3 = await fetch(`${base}/app/c/${cid}`, { headers: { cookie } }).then((r) => r.text());
+ok(cpage3.includes("Details"), "campaign page rows have a Details control");
+
 // "couldn't find the video" report
 let nf = await fetch(`${base}/api/report`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug, kind: "not_found", worker_ref: "lost_01", src: "sg", keyword: "kw one", note: "only old videos" }) }).then((r) => r.json());
 ok(nf.ok === true, "not-found report accepted");

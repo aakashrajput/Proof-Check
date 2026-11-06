@@ -211,3 +211,14 @@ table.subs .mono { font-family: var(--mono); font-size: 12px; }
 .nf.done ul { margin: 6px 0; padding-left: 18px; } .nf.done li { margin: 3px 0; }
 
 .pastecheck { margin: 4px 0 0; } .pastecheck.ok { color: var(--ok); } .pastecheck.bad { color: var(--warn); }
+
+/* submission details */
+table.subs .actions { flex-wrap: wrap; }
+table.subs tr.open td { border-bottom: 0; background: rgba(124,92,255,.04); }
+table.subs tr.details-row td { background: rgba(124,92,255,.04); padding-top: 0; }
+.details-panel { width: 100%; margin-top: 0; background: #0b0a0f; border: 1px solid var(--line); border-radius: 10px; padding: 12px; text-align: left; font-size: 13px; }
+.dl { display: grid; grid-template-columns: 1fr; gap: 4px; }
+.dl-row { display: grid; grid-template-columns: 160px 1fr; gap: 10px; padding: 3px 0; border-bottom: 1px dashed rgba(255,255,255,.05); }
+.dl-k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+.dl-v { overflow-wrap: anywhere; } .dl-v.ok { color: var(--ok); } .dl-v.bad { color: var(--bad); } .dl-v.warn { color: var(--warn); }
+@media (max-width: 700px) { .dl-row { grid-template-columns: 1fr; gap: 2px; } .details-panel { width: 86vw; } }

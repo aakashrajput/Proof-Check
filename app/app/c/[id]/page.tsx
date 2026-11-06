@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
-import { one, q, mmss, humanDur, type Campaign, type Submission, type Variant } from "@/lib/db";
+import { one, q, type Campaign, type Submission, type Variant } from "@/lib/db";
 import CampaignForm from "../../CampaignForm";
+import SubRow from "./SubRow";
 import { requireUser } from "@/lib/auth";
 import { sgCredsFor } from "@/lib/sproutgigs";
 import { updateCampaign, setStatus, override, syncNow } from "../../actions";
@@ -107,27 +108,9 @@ export default async function CampaignPage({ params, searchParams }: { params: P
         {subs.length === 0 && <p className="muted">Nothing yet.</p>}
         {subs.length > 0 && (
           <div className="tablewrap"><table className="subs"><thead><tr><th>Worker</th><th>Result</th><th>Watched</th><th>Playback</th><th>Confirmed</th><th>Saw</th><th>Code</th><th>Last update</th><th></th></tr></thead>
-            <tbody>{subs.map((s) => {
-              const minS = c.min_seconds || 0;
-              const more = s.watch_seconds != null && minS > 0 && s.watch_seconds < minS ? Math.ceil(minS - s.watch_seconds) : 0;
-              let note: string | null = null;
-              try { note = s.raw_json ? (JSON.parse(s.raw_json).note ?? null) : null; } catch { note = null; }
-              return (
-                <tr key={s.id}>
-                  <td><b>{s.worker_ref ?? "—"}</b>{s.src ? <span className={`src ${s.src}`}>{s.src}</span> : null}<div className="small muted">#{s.id} · via {s.source ?? "—"}{s.attempts > 1 ? ` · ${s.attempts} attempts` : ""}</div></td>
-                  <td><span className={`pill ${s.status}`}>{s.status}</span><div className="small muted reason">{s.reason}{note && s.reason === "text_unreadable" ? <details><summary>what they pasted</summary><div className="term" style={{ fontSize: 11 }}>{note.replace(/^unreadable sample: /, "")}</div></details> : null}</div></td>
-                  <td className="nowrap">{s.watch_seconds != null ? <><b>{mmss(s.watch_seconds)}</b>{minS ? <span className="muted"> / {mmss(minS)}</span> : null}{more ? <div className="small bad">{humanDur(more)} short</div> : null}</> : s.frames_total != null ? `${s.frames_total} fr` : "—"}</td>
-                  <td className="small"><span className={`mono ${s.video_id_read && s.video_id_read !== c.video_id ? "bad" : ""}`}>{s.video_id_read ?? "—"}</span>{s.scpn ? <div className="mono muted">{s.scpn.slice(0, 10)}…</div> : null}</td>
-                  <td title={s.attested ?? ""}>{s.attested ? s.attested.split(",").map((a) => a === "like" ? "👍" : a === "subscribe" ? "🔔" : "💬").join(" ") : "—"}</td>
-                  <td className="small">{variants.find((v) => v.id === s.variant_id)?.label ?? "—"}</td>
-                  <td className="mono nowrap">{s.payout_code ?? "—"}</td>
-                  <td className="small muted nowrap">{(s.updated_at ?? s.created_at).slice(5, 16)}</td>
-                  <td className="actions">
-                    {s.status !== "pass" && <form action={override}><input type="hidden" name="submission_id" value={s.id} /><input type="hidden" name="campaign_id" value={c.id} /><input type="hidden" name="to" value="pass" /><button className="secondary">Approve</button></form>}
-                    {s.status !== "fail" && <form action={override}><input type="hidden" name="submission_id" value={s.id} /><input type="hidden" name="campaign_id" value={c.id} /><input type="hidden" name="to" value="fail" /><button className="secondary">Reject</button></form>}
-                  </td>
-                </tr>);
-            })}</tbody></table></div>
+            <tbody>{subs.map((s) => (
+              <SubRow key={s.id} sub={s} campaignId={c.id} campaignVideo={c.video_id} minSeconds={c.min_seconds || 0} variantLabel={variants.find((v) => v.id === s.variant_id)?.label ?? null} override={override} colSpan={9} />
+            ))}</tbody></table></div>
         )}
       </div>
 

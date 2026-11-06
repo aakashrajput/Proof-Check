@@ -91,7 +91,7 @@ type Ctx = {
   sha: string; sha2: string | null; text_sha: string | null; source: "screenshot" | "text" | "both";
   read?: PanelRead; text?: TextRead;
   video_id?: string | null; scpn?: string | null; frames_total?: number | null; frames_dropped?: number | null; fps?: number | null;
-  watch?: number | null; played?: number | null; note?: string;
+  watch?: number | null; played?: number | null; note?: string; raw?: string;
 };
 
 export async function verifySubmission(
@@ -119,7 +119,7 @@ export async function verifySubmission(
 
   const ctx: Ctx = { ...base };
   if (hasFiles) { ctx.sha = sha256(files[0].bytes); ctx.sha2 = files[1] ? sha256(files[1].bytes) : null; }
-  if (hasText) ctx.text_sha = sha256(Buffer.from(text.replace(/\s+/g, " ")));
+  if (hasText) { ctx.text_sha = sha256(Buffer.from(text.replace(/\s+/g, " "))); ctx.raw = text.slice(0, 4000); }
 
   // 1. Exact dedupe — bytes and text (any campaign; recycled proof is recycled everywhere)
   if (hasFiles) {
@@ -221,12 +221,12 @@ export async function verifySubmission(
   const minFrames = campaign.min_frames || 0, minSeconds = campaign.min_seconds || 0;
   // 6a. Text proof without watch-time fields (iPhone app): measure the gap between two pastes of the SAME playback,
   //     on the server clock. First paste opens the timer; a later paste with the same CPN closes it.
-  if (minSeconds > 0 && ctx.watch == null && hasText && ctx.text && ctx.text.format === "ios" && ctx.scpn) {
+  if (minSeconds > 0 && ctx.watch == null && hasText && ctx.text && ctx.scpn) {
     const first = await one<{ id: number; created_at: string; attempts: number }>("SELECT id, created_at, attempts FROM submissions WHERE campaign_id = ? AND scpn = ? AND status != 'pass' ORDER BY id ASC LIMIT 1", [campaign.id, ctx.scpn]);
     if (!first) {
-      ctx.note = "ios timer started";
+      ctx.note = "timer started (text has no watch-time fields)";
       return fail(campaign, meta, ctx, "second_paste_needed",
-        `iPhone's debug info doesn't include watch time, so we time it between two pastes. Timer started now. Keep this video playing — don't close or reload it — and after ${mmss(minSeconds)} open Stats for nerds again, copy, and paste the new text here.`);
+        `${ctx.text.format === "ios" ? "iPhone's" : "This"} debug info doesn't include watch time, so we time it between two pastes. Timer started now. Keep this video playing — don't close or reload it — and after ${mmss(minSeconds)} open Stats for nerds again, copy, and paste the new text here.`);
     }
     const elapsed = (Date.now() - Date.parse(first.created_at.replace(" ", "T") + "Z")) / 1000;
     if (elapsed < minSeconds) {
@@ -286,7 +286,7 @@ async function insert(c: Campaign, meta: Meta, ctx: Ctx, status: string, reason:
          attempts = attempts + 1, updated_at = datetime('now') WHERE id = ?`,
       [meta.worker_ref ?? null, meta.src ?? null, ctx.sha || null, ctx.sha2, ctx.text_sha, ctx.source, ctx.scpn ?? null, ctx.video_id ?? null,
        ctx.frames_total ?? null, ctx.frames_dropped ?? null, ctx.fps ?? null, ctx.watch ?? null, ctx.played ?? null, status, reason, code,
-       JSON.stringify({ read: ctx.read ?? null, text: ctx.text ?? null, note: note ?? null }), prior.id]);
+       JSON.stringify({ read: ctx.read ?? null, text: ctx.text ?? null, raw: ctx.raw ?? null, note: note ?? null }), prior.id]);
     return prior.id;
   }
   const res = await run(
@@ -294,7 +294,7 @@ async function insert(c: Campaign, meta: Meta, ctx: Ctx, status: string, reason:
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [c.id, meta.worker_ref ?? null, meta.src ?? null, ctx.sha || null, ctx.sha2, ctx.text_sha, ctx.source, ctx.scpn ?? null, ctx.video_id ?? null,
      ctx.frames_total ?? null, ctx.frames_dropped ?? null, ctx.fps ?? null, ctx.watch ?? null, ctx.played ?? null, status, reason, code,
-     JSON.stringify({ read: ctx.read ?? null, text: ctx.text ?? null, note: note ?? null })],
+     JSON.stringify({ read: ctx.read ?? null, text: ctx.text ?? null, raw: ctx.raw ?? null, note: note ?? null })],
   );
   return Number(res.lastInsertRowid);
 }
