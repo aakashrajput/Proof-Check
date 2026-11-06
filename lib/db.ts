@@ -8,11 +8,27 @@ let ready: Promise<void> | null = null;
 export function db(): Client {
   if (!client) {
     // Vercel Marketplace's Turso integration injects TURSO_DATABASE_URL / TURSO_AUTH_TOKEN automatically.
-    const url = process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL || "file:./data/proofcheck.db";
+    const url = process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL || defaultFileUrl();
     const authToken = process.env.DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN;
     client = createClient({ url, authToken });
   }
   return client;
+}
+
+// On Vercel/Lambda the project dir is read-only; /tmp is writable but ephemeral (data lost on cold start).
+function defaultFileUrl() {
+  return process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME ? "file:/tmp/proofcheck.db" : "file:./data/proofcheck.db";
+}
+
+/** True when no persistent database is configured (ephemeral /tmp fallback in use). */
+export function dbIsEphemeral() {
+  return !process.env.DATABASE_URL && !process.env.TURSO_DATABASE_URL && !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+}
+
+/** Which backend is in use, for diagnostics (never includes secrets). */
+export function dbInfo() {
+  const url = process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL || defaultFileUrl();
+  return { backend: url.startsWith("file:") ? "sqlite-file" : "libsql-remote", host: url.startsWith("file:") ? url : new URL(url).host, ephemeral: dbIsEphemeral() };
 }
 
 const SCHEMA = `

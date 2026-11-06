@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { q, type Campaign } from "@/lib/db";
+import { q, dbIsEphemeral, type Campaign } from "@/lib/db";
 import { createCampaign } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -7,7 +7,10 @@ export const dynamic = "force-dynamic";
 type Row = Campaign & { total: number; passed: number; failed: number; review: number; opened: number };
 
 export default async function Admin() {
-  const rows = await q<Row>(`
+  let rows: Row[] = [];
+  let dbError: string | null = null;
+  try {
+    rows = await q<Row>(`
     SELECT c.*,
       (SELECT COUNT(*) FROM submissions s WHERE s.campaign_id=c.id) total,
       (SELECT COUNT(*) FROM submissions s WHERE s.campaign_id=c.id AND status='pass') passed,
@@ -15,6 +18,7 @@ export default async function Admin() {
       (SELECT COUNT(*) FROM submissions s WHERE s.campaign_id=c.id AND status='review') review,
       (SELECT COUNT(*) FROM events e WHERE e.campaign_id=c.id AND kind='opened') opened
     FROM campaigns c ORDER BY c.id DESC`);
+  } catch (e) { dbError = String(e); }
   const sgReady = !!(process.env.SG_USER_ID && process.env.SG_API_SECRET);
   const gemReady = !!process.env.GEMINI_API_KEY || !!process.env.GEMINI_MOCK_JSON;
 
@@ -23,6 +27,9 @@ export default async function Admin() {
       <div className="top"><div className="brand">Proof<span>Check</span> · admin</div>
         <span className="small muted">Gemini {gemReady ? "✓" : "✗ (set GEMINI_API_KEY)"} · SproutGigs {sgReady ? "✓" : "✗ (set SG_USER_ID / SG_API_SECRET)"}</span></div>
 
+      {dbError && <div className="card" style={{ borderColor: "var(--bad)" }}><h2 style={{ color: "var(--bad)" }}>Database error</h2><div className="term">{dbError}</div>
+        <p className="small muted">Check <a href="/api/health">/api/health</a>. On Vercel, attach Turso under Storage (or set DATABASE_URL) and redeploy.</p></div>}
+      {!dbError && dbIsEphemeral() && <div className="card" style={{ borderColor: "var(--warn)" }}><b style={{ color: "var(--warn)" }}>No persistent database.</b> <span className="small">Running on temporary storage — campaigns and codes vanish on each cold start. Attach Turso under Vercel → Storage, then redeploy. <a href="/api/health">Details</a></span></div>}
       <div className="card">
         <h2>Campaigns</h2>
         {rows.length === 0 && <p className="muted">No campaigns yet. Create one below.</p>}
