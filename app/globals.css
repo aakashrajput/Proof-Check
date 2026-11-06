@@ -203,3 +203,9 @@ table.subs .src { display: inline-block; margin-left: 6px; padding: 1px 6px; bor
 table.subs .src.preview { color: var(--warn); border-color: rgba(255,181,71,.4); }
 table.subs .actions { display: flex; gap: 6px; } table.subs .actions button { padding: 5px 9px; font-size: 12px; }
 table.subs .mono { font-family: var(--mono); font-size: 12px; }
+
+/* couldn't-find report */
+.nf { margin-top: 12px; } .nf > button { font-size: 13px; padding: 7px 12px; }
+.nf-form { border: 1px dashed var(--line); border-radius: 10px; padding: 12px; margin-top: 4px; }
+.nf.done { border: 1px solid rgba(255,181,71,.5); background: rgba(255,181,71,.06); border-radius: 10px; padding: 12px; }
+.nf.done ul { margin: 6px 0; padding-left: 18px; } .nf.done li { margin: 3px 0; }

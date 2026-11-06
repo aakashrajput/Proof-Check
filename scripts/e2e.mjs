@@ -198,6 +198,17 @@ r = await submit(null, null, dbg({ cpn: "Jj1Bb2Cc3Dd4Ee5F" }));
 ok(r.reason === "both_required", "proof_mode=both rejects text-only");
 await db.execute({ sql: "UPDATE campaigns SET proof_mode='either' WHERE id=?", args: [cid] });
 
+// "couldn't find the video" report
+let nf = await fetch(`${base}/api/report`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug, kind: "not_found", worker_ref: "lost_01", src: "sg", keyword: "kw one", note: "only old videos" }) }).then((r) => r.json());
+ok(nf.ok === true, "not-found report accepted");
+nf = await fetch(`${base}/api/report`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug, kind: "not_found", worker_ref: "lost_01", src: "sg", keyword: "kw one" }) }).then((r) => r.json());
+const nfCount = Number((await db.execute({ sql: "SELECT COUNT(*) n FROM reports WHERE campaign_id=?", args: [cid] })).rows[0].n);
+ok(nf.ok === true && nfCount === 1, "same worker reporting twice updates, doesn't duplicate");
+const cpage2 = (await fetch(`${base}/app/c/${cid}`, { headers: { cookie } }).then((r) => r.text())).replace(/<!-- -->/g, "");
+ok(cpage2.includes("couldn't find video") && cpage2.includes("kw one") && cpage2.includes("only old videos"), "campaign page shows not-found count, keyword breakdown and note");
+const wpage = await fetch(`${base}/t/${slug}`).then((r) => r.text());
+ok(/I couldn.{0,8}t find the video on YouTube/.test(wpage), "worker page offers the couldn't-find button");
+
 // codes table + sync endpoint auth
 const c = (await db.execute({ sql: "SELECT * FROM codes WHERE code=?", args: [code] })).rows[0];
 ok(c && c.used_at == null && Number(c.campaign_id) === cid, "payout code stored, unused");
@@ -217,6 +228,7 @@ await db.execute({ sql: "DELETE FROM codes WHERE campaign_id=?", args: [cid] });
 await db.execute({ sql: "DELETE FROM events WHERE campaign_id=?", args: [cid] });
 await db.execute({ sql: "DELETE FROM campaigns WHERE id=?", args: [cid] });
 await db.execute({ sql: "DELETE FROM campaign_variants WHERE campaign_id=?", args: [cid] });
+await db.execute({ sql: "DELETE FROM reports WHERE campaign_id=?", args: [cid] });
 await db.execute({ sql: "DELETE FROM users WHERE email IN (?, ?)", args: [email, "x" + email] });
 console.log(fails ? `\n${fails} FAILED` : "\nALL PASSED");
 process.exit(fails ? 1 : 0);

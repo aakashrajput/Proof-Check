@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { one, q, run, parseAttest, type Campaign, type Variant } from "@/lib/db";
 import UploadForm from "./UploadForm";
 import CopyBtn from "./Copy";
+import NotFound from "./NotFound";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +84,7 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
               <h2><span className="n">{variants.length ? 2 : 1}</span> Search this keyword on YouTube</h2>
               <div className="kw big"><span id="kw">{keyword}</span><CopyBtn text={keyword} /></div>
               <p className="small muted">Type it exactly as shown and open the video <b>from the search results</b>, not from a link. {c.channel_title ? <>Check the channel is <b>{channel}</b>.</> : null}</p>
+              <NotFound slug={c.slug} keyword={keyword} src={src ?? null} workerRef={w ?? null} channel={channel} title={title} />
             </section>
           )}
 

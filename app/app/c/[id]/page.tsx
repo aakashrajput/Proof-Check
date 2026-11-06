@@ -26,6 +26,9 @@ export default async function CampaignPage({ params, searchParams }: { params: P
     SELECT SUM(kind='opened') opened, SUM(kind='submitted') submitted, SUM(kind='verified') verified, SUM(kind='rejected') rejected FROM events WHERE campaign_id = ?`, [c.id]);
   const reasons = await q<{ reason: string; n: number }>("SELECT reason, COUNT(*) n FROM submissions WHERE campaign_id=? AND status!='pass' GROUP BY reason ORDER BY n DESC LIMIT 6", [c.id]);
   const ratings = await q<{ rating: string; n: number }>("SELECT rating, COUNT(*) n FROM sg_ratings WHERE campaign_id=? GROUP BY rating", [c.id]);
+  const nfByKeyword = await q<{ keyword: string | null; n: number }>("SELECT keyword, COUNT(*) n FROM reports WHERE campaign_id = ? AND kind = 'not_found' GROUP BY keyword ORDER BY n DESC", [c.id]);
+  const notFoundTotal = nfByKeyword.reduce((a, r) => a + Number(r.n), 0);
+  const notFoundRecent = await q<{ worker_ref: string | null; keyword: string | null; note: string | null; created_at: string; src: string | null }>("SELECT worker_ref, keyword, note, created_at, src FROM reports WHERE campaign_id = ? AND kind = 'not_found' ORDER BY id DESC LIMIT 20", [c.id]);
   const lastSync = await one<{ src: string; created_at: string }>("SELECT src, created_at FROM events WHERE campaign_id=? AND kind='sync' ORDER BY id DESC LIMIT 1", [c.id]);
 
   const h = await headers();
@@ -62,11 +65,26 @@ export default async function CampaignPage({ params, searchParams }: { params: P
           <div className="stat"><b style={{ color: "var(--ok)" }}>{counts?.verified ?? 0}</b><span className="small muted">verified</span></div>
           <div className="stat"><b style={{ color: "var(--bad)" }}>{counts?.rejected ?? 0}</b><span className="small muted">rejected</span></div>
           <div className="stat"><b>{passRate}%</b><span className="small muted">pass rate</span></div>
+          <div className="stat"><b className={notFoundTotal ? "warn" : ""}>{notFoundTotal}</b><span className="small muted">couldn't find video</span></div>
         </div>
         {reasons.length > 0 && <p className="small muted" style={{ marginTop: 10 }}>Top fail reasons: {reasons.map((r) => `${r.reason} (${r.n})`).join(" · ")}</p>}
         {c.sg_job_id && <p className="small muted">SproutGigs ratings sent: {ratings.length ? ratings.map((r) => `${r.rating} ${r.n}`).join(" · ") : "none yet"}{lastSync ? ` · last sync ${lastSync.created_at} UTC` : ""}</p>}
         {lastSync && <div className="term" style={{ marginTop: 8 }}>{lastSync.src}</div>}
       </div>
+
+      {notFoundTotal > 0 && (
+        <div className="card" style={{ borderColor: "rgba(255,181,71,.5)" }}>
+          <h3>“Couldn't find the video” reports — by keyword shown</h3>
+          <div className="tablewrap"><table><thead><tr><th>Keyword</th><th>Reports</th><th>Share</th></tr></thead><tbody>
+            {nfByKeyword.map((r) => <tr key={r.keyword ?? "—"}><td className="mono">{r.keyword ?? "(no keyword)"}</td><td>{r.n}</td><td>{Math.round((100 * Number(r.n)) / notFoundTotal)}%</td></tr>)}
+          </tbody></table></div>
+          <p className="small muted" style={{ marginTop: 8 }}>{counts?.opened ? `${Math.round((100 * notFoundTotal) / counts.opened)}% of page opens` : ""} · If one keyword dominates, the video isn't ranking for it yet — swap it in <i>Edit campaign</i> or tell workers to filter by upload date.</p>
+          <details style={{ marginTop: 8 }}><summary className="small" style={{ cursor: "pointer", color: "var(--accent)" }}>Latest reports</summary>
+            <div className="tablewrap"><table><thead><tr><th>When (UTC)</th><th>Worker</th><th>Keyword</th><th>Note</th></tr></thead><tbody>
+              {notFoundRecent.map((r, i) => <tr key={i}><td className="small nowrap">{r.created_at.slice(5, 16)}</td><td><b>{r.worker_ref ?? "—"}</b>{r.src ? <span className="src">{r.src}</span> : null}</td><td className="mono small">{r.keyword ?? "—"}</td><td className="small">{r.note ?? "—"}</td></tr>)}
+            </tbody></table></div></details>
+        </div>
+      )}
 
       {variants.length > 0 && (
         <div className="card">
