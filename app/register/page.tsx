@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
+import { dbPersistenceWarning } from "@/lib/db";
 
 export default async function Register({ searchParams }: { searchParams: Promise<{ e?: string }> }) {
   if (await currentUser()) redirect("/app");
@@ -8,6 +9,7 @@ export default async function Register({ searchParams }: { searchParams: Promise
   return (
     <div className="wrap narrow">
       <div className="top"><Link className="brand" href="/">Proof<span>Check</span></Link><Link className="small" href="/login">Sign in</Link></div>
+      {dbPersistenceWarning() && <div className="card small" style={{ borderColor: "var(--bad)" }}><b style={{ color: "var(--bad)" }}>Heads-up for the site owner:</b> {dbPersistenceWarning()}</div>}
       <form className="card" method="post" action="/api/auth/register">
         <h2>Create your account</h2>
         <p className="small muted">For employers posting YouTube watch tasks. Workers never need an account.</p>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { q, dbIsEphemeral, type Campaign } from "@/lib/db";
+import { q, dbPersistenceWarning, type Campaign } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { sgCredsFor } from "@/lib/sproutgigs";
 import { createCampaign } from "./actions";
@@ -33,7 +33,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       {welcome && <div className="card" style={{ borderColor: "var(--accent)" }}><b>Welcome{u.name ? `, ${u.name}` : ""}.</b> Create your first campaign below. You'll get one task link to paste into your job description; workers open it, submit proof, and get a payout code only when the proof passes.</div>}
       {e && <div className="card" style={{ borderColor: "var(--bad)" }}>{e}</div>}
       {dbError && <div className="card" style={{ borderColor: "var(--bad)" }}><h2 style={{ color: "var(--bad)" }}>Database error</h2><div className="term">{dbError}</div><p className="small muted">See <a href="/api/health">/api/health</a>.</p></div>}
-      {!dbError && dbIsEphemeral() && <div className="card" style={{ borderColor: "var(--warn)" }}><b style={{ color: "var(--warn)" }}>No persistent database.</b> <span className="small">Data vanishes on each cold start. Attach Turso under Vercel → Storage. <a href="/api/health">Details</a></span></div>}
+      {!dbError && dbPersistenceWarning() && <div className="card" style={{ borderColor: "var(--bad)" }}><b style={{ color: "var(--bad)" }}>Database is not persistent.</b> <span className="small">{dbPersistenceWarning()} <a href="/api/health">Details</a></span></div>}
       {!sgReady && <div className="card small" style={{ borderColor: "var(--line)" }}>SproutGigs auto-rating is off until you add your API credentials in <Link href="/app/settings">Settings</Link>. Verification and payout codes work without it.</div>}
 
       <div className="card">

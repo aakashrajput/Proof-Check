@@ -77,9 +77,11 @@ CRON_SECRET=anything BASE_URL=http://localhost:3000 node scripts/poll.mjs 10   #
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Faakashrajput%2FProof-Check&project-name=proof-check&env=ADMIN_PASSWORD,CRON_SECRET&envDescription=ADMIN_PASSWORD%20protects%20%2Fadmin.%20CRON_SECRET%20is%20any%20random%20string.&envLink=https%3A%2F%2Fgithub.com%2Faakashrajput%2FProof-Check%23deploy-to-vercel-works-from-a-phone)
 
 1. Tap the button, sign in with GitHub, tap **Deploy**. Enter `ADMIN_PASSWORD` and `CRON_SECRET` when asked.
-2. **Database** — SQLite files don't persist on Vercel. In the project: **Storage → Create Database → Turso** (free).
-   Vercel injects `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` and the app picks them up; redeploy once.
-   (Or set `DATABASE_URL` + `DATABASE_AUTH_TOKEN` yourself from turso.tech.)
+2. **Database** — SQLite files don't persist on Vercel, and **the Turso marketplace integration gives every deployment
+   its own empty database** (hostname `dpl-…`), so accounts vanish on each push. Use a fixed database instead:
+   sign in at [app.turso.tech](https://app.turso.tech) → Create Database → copy the `libsql://…` URL and create a token →
+   in Vercel set `DATABASE_URL` and `DATABASE_AUTH_TOKEN` (Production + Preview) → redeploy. These override the
+   integration's variables. `/api/health` warns loudly while a `dpl-` database is in use.
 3. **Settings → Environment Variables**: add `GEMINI_API_KEY` for screenshot proof (text proof works without it),
    and `SG_USER_ID` / `SG_API_SECRET` for auto-rating.
 4. Cron: `vercel.json` ships a **daily** schedule so Hobby deploys succeed. On Pro change it to `* * * * *`;

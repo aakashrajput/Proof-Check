@@ -47,6 +47,24 @@ export function dbIsEphemeral() {
   return resolveDb().url.startsWith("file:/tmp/");
 }
 
+/**
+ * True when the Turso *marketplace integration* handed us a per-deployment database (hostname starts with "dpl-").
+ * Such a database is recreated empty on every deploy, so accounts and campaigns vanish. Fix: set DATABASE_URL +
+ * DATABASE_AUTH_TOKEN to a fixed Turso database; they take precedence.
+ */
+export function dbIsPerDeployment() {
+  const { url, source } = resolveDb();
+  if (source === "DATABASE_URL") return false;
+  try { return /^dpl-/i.test(new URL(url).host); } catch { return false; }
+}
+
+/** Human-readable persistence warning, or null when the database is fine. */
+export function dbPersistenceWarning(): string | null {
+  if (dbIsEphemeral()) return "No persistent database configured: using temporary storage, data is lost on every cold start. Set DATABASE_URL + DATABASE_AUTH_TOKEN to a Turso database.";
+  if (dbIsPerDeployment()) return "The Turso integration is providing a PER-DEPLOYMENT database (hostname starts with dpl-). Every deploy starts empty: accounts and campaigns are lost. Create a fixed database at turso.tech and set DATABASE_URL + DATABASE_AUTH_TOKEN in Vercel (they override the integration).";
+  return null;
+}
+
 /** Env var names that look database-related (names only, never values) — for /api/health. */
 export function dbEnvNames() {
   return Object.keys(process.env).filter((k) => /TURSO|LIBSQL|DATABASE|POSTGRES|NEON|SUPABASE|UPSTASH|KV_|REDIS|MONGO|PLANETSCALE|_URL$|TOKEN$/i.test(k) && !/^(VERCEL_|NEXT_|NODE_|npm_|AWS_)/.test(k)).sort();
@@ -56,7 +74,7 @@ export function dbEnvNames() {
 export function dbInfo() {
   const { url, authToken, source } = resolveDb();
   let host = url; try { if (!url.startsWith("file:")) host = new URL(url).host; } catch { /* keep raw */ }
-  return { backend: url.startsWith("file:") ? "sqlite-file" : "libsql-remote", host, source, hasToken: !!authToken, ephemeral: dbIsEphemeral() };
+  return { backend: url.startsWith("file:") ? "sqlite-file" : "libsql-remote", host, source, hasToken: !!authToken, ephemeral: dbIsEphemeral(), perDeployment: dbIsPerDeployment(), persistent: !dbIsEphemeral() && !dbIsPerDeployment() };
 }
 
 

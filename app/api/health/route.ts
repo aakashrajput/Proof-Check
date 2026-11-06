@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { q, dbInfo, dbEnvNames } from "@/lib/db";
+import { q, dbInfo, dbEnvNames, dbPersistenceWarning } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +13,12 @@ export async function GET() {
     // other marketplace DBs people pick by mistake — present means "wrong kind of database for this app"
     POSTGRES_URL: has("POSTGRES_URL"), DATABASE_URL_UNPOOLED: has("DATABASE_URL_UNPOOLED"), KV_REST_API_URL: has("KV_REST_API_URL"), UPSTASH_REDIS_REST_URL: has("UPSTASH_REDIS_REST_URL"),
   };
-  let db: { ok: boolean; campaigns?: number; error?: string } = { ok: false };
-  try { const r = await q<{ n: number }>("SELECT COUNT(*) n FROM campaigns"); db = { ok: true, campaigns: Number(r[0]?.n ?? 0) }; }
+  let db: { ok: boolean; campaigns?: number; users?: number; error?: string } = { ok: false };
+  try { const r = await q<{ n: number }>("SELECT COUNT(*) n FROM campaigns"); const u = await q<{ n: number }>("SELECT COUNT(*) n FROM users"); db = { ok: true, campaigns: Number(r[0]?.n ?? 0), users: Number(u[0]?.n ?? 0) }; }
   catch (e) { db = { ok: false, error: String(e).slice(0, 300) }; }
   const info = dbInfo();
   const warnings: string[] = [];
-  if (info.ephemeral) warnings.push("No persistent database configured: using /tmp SQLite, data is lost on every cold start. Connect Turso (Storage tab) or set DATABASE_URL.");
+  const pw = dbPersistenceWarning(); if (pw) warnings.unshift(pw);
   if (info.backend === "libsql-remote" && !info.hasToken) warnings.push(`Found database URL in ${info.source} but no matching auth token variable.`);
   if (env.POSTGRES_URL && info.backend === "sqlite-file") warnings.push("A Postgres database is attached but this app uses libSQL/Turso. Remove it and add Turso instead.");
   if (!env.ADMIN_PASSWORD) warnings.push("ADMIN_PASSWORD is not set; admin login is impossible.");
