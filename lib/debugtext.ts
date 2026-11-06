@@ -59,12 +59,18 @@ export function parseDebugText(input: string): TextRead {
       out.vct = n("vct") ?? n("cmt");
       out.duration = n("vd") ?? n("len");
       out.played_seconds = sumRanges(s("vpl"));
-      out.timestamp_ms = n("timestamp") ?? (s("debug_date") ? Date.parse(s("debug_date")!) || null : null);
-      out.platform = s("cplatform") ?? s("c");
-      const itag = n("fmt");
-      if (itag != null) out.fps = FPS60.has(itag) ? 60 : 30;
+      out.timestamp_ms = n("timestamp") ?? (s("debug_date") ? Date.parse(s("debug_date")!) || null : null) ?? (s("time") ? Date.parse(s("time")!) || null : null);
+      out.platform = s("c") ?? s("cplatform");
+      // fps: Android's fmt is "243 vp9 640x360@30"; desktop's fmt is a bare itag
+      const fmt = s("fmt");
+      const at = fmt?.match(/@(\d{2,3})/);
+      if (at) out.fps = Number(at[1]);
+      else { const itag = n("fmt"); if (itag != null) out.fps = FPS60.has(itag) ? 60 : 30; }
       const fpsExplicit = n("fps") ?? n("vfr");
       if (fpsExplicit) out.fps = fpsExplicit;
+      // Android frames: "df":"dropped/total"
+      const df = s("df")?.match(/^(\d+)\s*\/\s*(\d+)$/);
+      if (df && out.frames_total == null) { out.frames_dropped = Number(df[1]); out.frames_total = Number(df[2]); }
     } catch { /* fall through to line parsing */ }
   }
 
@@ -73,14 +79,15 @@ export function parseDebugText(input: string): TextRead {
     out.format = "json";
     const g = (k: string) => text.match(new RegExp(`"${k}"\\s*:\\s*"?([^",}]*)`))?.[1]?.trim() ?? null;
     const n = (k: string) => { const v = g(k); if (v == null || v === "") return null; const x = Number(v); return Number.isFinite(x) ? x : null; };
-    out.video_id = g("docid") ?? g("debug_videoId") ?? g("videoId") ?? g("video_id") ?? g("vid");
+    out.video_id = g("docid") ?? g("debug_videoId") ?? g("videoId") ?? g("videoid") ?? g("video_id") ?? g("vid");
     out.scpn = g("cpn") ?? g("client_playback_nonce");
     out.frames_total = n("totalVideoFrames") ?? n("totalFrames");
     out.frames_dropped = n("droppedVideoFrames") ?? n("droppedFrames");
+    const df = text.match(/"df"\s*:\s*"(\d+)\s*\\?\/\s*(\d+)"/); if (df && out.frames_total == null) { out.frames_dropped = Number(df[1]); out.frames_total = Number(df[2]); }
     out.vct = n("vct") ?? n("cmt"); out.duration = n("vd") ?? n("len");
     out.played_seconds = sumRanges(g("vpl"));
-    out.timestamp_ms = n("timestamp");
-    const itag = n("fmt"); if (itag != null) out.fps = FPS60.has(itag) ? 60 : 30;
+    out.timestamp_ms = n("timestamp") ?? (g("time") ? Date.parse(g("time")!) || null : null);
+    const fmtAt = text.match(/"fmt"\s*:\s*"[^"]*@(\d{2,3})/); if (fmtAt) out.fps = Number(fmtAt[1]); else { const itag = n("fmt"); if (itag != null) out.fps = FPS60.has(itag) ? 60 : 30; }
     out.problems.push("truncated_json");
   }
 

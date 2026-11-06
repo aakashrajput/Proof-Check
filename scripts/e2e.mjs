@@ -222,6 +222,13 @@ ok(r.reason === "reused_playback", "a third paste of the same iPhone CPN after p
 r = await submit(null, null, iosText("IosNonce00000002", nowIso()).replaceAll(VIDEO, "xxxxxxxxxxx"), null, "like,subscribe,comment", "ios_03");
 ok(r.reason === "wrong_video", "iPhone paste from the wrong video is rejected before the timer starts");
 
+// Real Android app debug info: videoid + cpn + df (dropped/total frames) + fmt "...@30" → one-paste verification
+const androidReal = (cpn, frames) => `{"cplatform":"mobile","cff":"SMALL_FORM_FACTOR","c":"android","cplayer":"PLATYPUS","cmodel":"Infinix X6725","cos":"Android","cver":"21.44.528-SECONDARY","cbr":"com.google.android.youtube","videoid":"${VIDEO}","cpn":"${cpn}","fmt":"243 vp9 640x360@30","afmt":"249:CggKA2RyYxIBMQ opus","bh":99422,"conn":6,"volume":0,"df":"0\\/${frames}","time":"${new Date().toISOString()}","error":"No errors","logged_in":"1"}`;
+r = await submit(null, null, androidReal("zbGmueJQlVO0FOAr", 4110), null, "like,subscribe,comment", "infinix_01");
+ok(r.status === "pass" && Math.round(r.details.watch_seconds) === 137, `real Android debug info verifies in one paste (${Math.round(r.details.watch_seconds)} s from df/fmt)`);
+r = await submit(null, null, androidReal("zbGmueJQlVO0FOAs", 1800), null, "like,subscribe,comment", "infinix_02");
+ok(r.reason === "insufficient_watch_time" && /1:00/.test(r.message) && /1 min more \(60 s\)/.test(r.message), "short Android watch fails with m:ss guidance");
+
 // Any text proof without watch-time fields (e.g. an Android build without vpl/vct) uses the same two-paste timer
 r = await submit(null, null, JSON.stringify({ cplatform: "mobile", c: "android", cplayer: "PLATYPUS", docid: VIDEO, cpn: "AndroidNoTime001", timestamp: Date.now() }), null, "like,subscribe,comment", "andro_09");
 ok(r.reason === "second_paste_needed" && /This debug info doesn't include watch time/.test(r.message), "JSON without watch-time fields starts the two-paste timer");
