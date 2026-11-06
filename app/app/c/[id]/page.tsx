@@ -115,7 +115,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
       </div>
 
       <CampaignForm action={updateCampaign} mode="edit" gemReady={gemReady} initial={{ id: c.id, name: c.name, video_id: c.video_id, video_title: c.video_title, channel_title: c.channel_title, channel_handle: c.channel_handle,
-        min_seconds: c.min_seconds, min_frames: c.min_frames, keywords: c.keywords, instructions: c.instructions, proof_mode: c.proof_mode, sg_job_id: c.sg_job_id, duration_seconds: c.duration_seconds, thumbnail_url: c.thumbnail_url, attest: c.attest, show_instructions: c.show_instructions,
+        min_seconds: c.min_seconds, min_frames: c.min_frames, keywords: c.keywords, instructions: c.instructions, proof_mode: c.proof_mode, sg_job_id: c.sg_job_id, duration_seconds: c.duration_seconds, thumbnail_url: c.thumbnail_url, attest: c.attest, show_instructions: c.show_instructions, cumulative_watch: c.cumulative_watch,
         variants: variants.map((v) => ({ id: v.id, label: v.label as "A" | "B" | "C", title: v.title, thumb_url: v.thumb_url, thumb_data: v.thumb_data })) }} />
     </div>
   );

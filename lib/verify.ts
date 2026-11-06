@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "crypto";
-import { one, run, mmss, humanDur, type Campaign, type Submission } from "./db";
+import { one, q, run, mmss, humanDur, type Campaign, type Submission } from "./db";
 import { readPanel, type PanelRead } from "./gemini";
 import { parseDebugText, textWatchSeconds, type TextRead } from "./debugtext";
 
@@ -91,7 +91,7 @@ type Ctx = {
   sha: string; sha2: string | null; text_sha: string | null; source: "screenshot" | "text" | "both";
   read?: PanelRead; text?: TextRead;
   video_id?: string | null; scpn?: string | null; frames_total?: number | null; frames_dropped?: number | null; fps?: number | null;
-  watch?: number | null; played?: number | null; note?: string; raw?: string;
+  watch?: number | null; played?: number | null; note?: string; raw?: string; creditedFrom?: number[];
 };
 
 export async function verifySubmission(
@@ -241,8 +241,27 @@ export async function verifySubmission(
     if (ctx.watch == null) {
       if (!(minFrames > 0 && ctx.frames_total != null)) return review(campaign, meta, ctx, "watch_time_unreadable", "We could not determine the watch time; sent for manual review.");
     } else if (ctx.watch < minSeconds) {
-      const more = Math.max(1, Math.ceil(minSeconds - ctx.watch));
-      return fail(campaign, meta, ctx, "insufficient_watch_time", `You watched ${mmss(ctx.watch)} — this task needs ${mmss(minSeconds)}. Keep the video playing ${humanDur(more)} more (${more} s), then copy fresh debug info and paste it here.`);
+      // Cumulative credit: earlier short sessions by the SAME worker on this campaign (distinct playback IDs,
+      // never paid, never credited before) count toward the total. A restarted video no longer wipes out their time.
+      let credit = 0; let creditRows: { id: number; watch_seconds: number; scpn: string }[] = [];
+      if ((campaign.cumulative_watch ?? 1) !== 0 && meta.worker_ref) {
+        creditRows = await q<{ id: number; watch_seconds: number; scpn: string }>(
+          `SELECT id, watch_seconds, scpn FROM submissions WHERE campaign_id = ? AND worker_ref = ? AND status = 'fail' AND reason = 'insufficient_watch_time'
+             AND watch_seconds IS NOT NULL AND scpn IS NOT NULL AND scpn != ? AND credited_to IS NULL AND created_at > datetime('now', '-3 days') ORDER BY id`,
+          [campaign.id, meta.worker_ref, ctx.scpn ?? ""]);
+        credit = creditRows.reduce((a, r) => a + Number(r.watch_seconds), 0);
+      }
+      const total = ctx.watch + credit;
+      if (total < minSeconds) {
+        const more = Math.max(1, Math.ceil(minSeconds - total));
+        const breakdown = credit > 0 ? `This session ${mmss(ctx.watch)} + ${mmss(credit)} from your earlier session${creditRows.length > 1 ? "s" : ""} = ${mmss(total)} total.` : `You watched ${mmss(ctx.watch)}.`;
+        return fail(campaign, meta, ctx, "insufficient_watch_time",
+          `${breakdown} This task needs ${mmss(minSeconds)}. Keep THIS video playing ${humanDur(more)} more (${more} s) — don't restart or reload it — then copy fresh debug info and paste it here.${credit === 0 ? " (If you do restart by accident, your time so far still counts toward your total.)" : ""}`);
+      }
+      // Enough with credit → pass. Mark the credited sessions so they can't be counted twice.
+      ctx.note = `credited ${mmss(credit)} from earlier session${creditRows.length > 1 ? "s" : ""} #${creditRows.map((r) => r.id).join(", #")}`;
+      ctx.creditedFrom = creditRows.map((r) => r.id);
+      ctx.watch = total;
     }
   }
   if (minFrames > 0) {
@@ -252,10 +271,11 @@ export async function verifySubmission(
 
   // 7. Pass → issue payout code
   const code = "pw-" + randomBytes(4).toString("hex");
-  const id = await insert(campaign, meta, ctx, "pass", "verified", code);
+  const id = await insert(campaign, meta, ctx, "pass", "verified", code, ctx.note);
+  if (ctx.creditedFrom?.length) await run(`UPDATE submissions SET credited_to = ? WHERE id IN (${ctx.creditedFrom.map(() => "?").join(",")})`, [id, ...ctx.creditedFrom]);
   await run("INSERT INTO codes (code, submission_id, campaign_id) VALUES (?, ?, ?)", [code, id, campaign.id]);
   await run("INSERT INTO events (campaign_id, kind, src) VALUES (?, 'verified', ?)", [campaign.id, meta.src ?? null]);
-  return { status: "pass", reason: "verified", message: "Verified. Paste this code as your proof.", payout_code: code, details: details(ctx), checks: buildChecks(campaign, ctx, "pass", "verified"), submission_id: id };
+  return { status: "pass", reason: "verified", message: ctx.creditedFrom?.length ? `Verified — ${mmss(ctx.watch ?? 0)} in total, counting your earlier session${ctx.creditedFrom.length > 1 ? "s" : ""}. Paste this code as your proof.` : "Verified. Paste this code as your proof.", payout_code: code, details: details(ctx), checks: buildChecks(campaign, ctx, "pass", "verified"), submission_id: id };
 }
 
 function details(ctx: Ctx) {

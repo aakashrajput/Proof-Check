@@ -222,3 +222,7 @@ table.subs tr.details-row td { background: rgba(124,92,255,.04); padding-top: 0;
 .dl-k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
 .dl-v { overflow-wrap: anywhere; } .dl-v.ok { color: var(--ok); } .dl-v.bad { color: var(--bad); } .dl-v.warn { color: var(--warn); }
 @media (max-width: 700px) { .dl-row { grid-template-columns: 1fr; gap: 2px; } .details-panel { width: 86vw; } }
+
+/* worker status lookup */
+.status-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.status-form { display: flex; gap: 8px; } .status-form input { flex: 1; } .status-form button { white-space: nowrap; }

@@ -38,7 +38,7 @@ export default function UploadForm({ slug, src, workerRef, disabled, mode, varia
     const fd = new FormData();
     fd.set("slug", slug);
     if (src) fd.set("src", src);
-    if (wref) fd.set("worker_ref", wref);
+    if (wref) { fd.set("worker_ref", wref); try { localStorage.setItem(`pc_worker_${slug}`, wref.trim()); } catch { /* ignore */ } }
     if (text.trim()) fd.set("text", text.trim());
     if (variantId) fd.set("variant_id", String(variantId));
     if (attest.length) fd.set("attested", attest.filter((k) => attested.has(k)).join(","));

@@ -169,7 +169,7 @@ r = await submit(null, null, `cpn=${fresh()}&docid=${VIDEO}&vct=150.4&vd=212.1&v
 ok(r.status === "pass", "query-string style debug info parses");
 r = await submit(null, null, dbg({ timestamp: Date.now() + 1 }));
 ok(r.reason === "reused_playback", "re-copied text with same cpn rejected as reused playback");
-r = await submit(null, null, dbg({ cpn: "Aa1Bb2Cc3Dd4Ee5F", vct: "200.000", vpl: "0.000-30.000,170.000-200.000" }));
+r = await submit(null, null, dbg({ cpn: "Aa1Bb2Cc3Dd4Ee5F", vct: "200.000", vpl: "0.000-30.000,170.000-200.000" }), null, "like,subscribe,comment", "skipper_01");
 ok(r.reason === "insufficient_watch_time" && /watched 1:00/.test(r.message) && /1 min more \(60 s\)/.test(r.message), "skipped-through video: vpl sums to 60s < 120s even though playhead is 200s");
 r = await submit(null, null, dbg({ cpn: "Bb1Bb2Cc3Dd4Ee5F", docid: "xxxxxxxxxxx", debug_videoId: "xxxxxxxxxxx" }));
 ok(r.reason === "wrong_video", "text with wrong docid rejected");
@@ -236,6 +236,37 @@ const rawStored = (await db.execute({ sql: "SELECT raw_json FROM submissions WHE
 ok(/"raw":"\{\\"cplatform/.test(String(rawStored)), "raw pasted text is stored for review");
 const cpage3 = await fetch(`${base}/app/c/${cid}`, { headers: { cookie } }).then((r) => r.text());
 ok(cpage3.includes("Details"), "campaign page rows have a Details control");
+
+// The "7 minutes then restarted" story: earlier short session is credited to the next one for the same worker
+await db.execute({ sql: "UPDATE campaigns SET min_seconds = 480 WHERE id = ?", args: [cid] });
+r = await submit(png("st1"), { ...good, scpn: "STORY_SESSION_1", frames_total: 12960 }, null, null, "like,subscribe,comment", "storyA");   // 7:12
+ok(r.reason === "insufficient_watch_time" && /You watched 7:12/.test(r.message) && /48 s more \(48 s\)/.test(r.message) && /don't restart or reload/.test(r.message), "7:12 of 8:00 → '48 s more' and 'don't restart' guidance");
+const s1 = r.submission_id;
+r = await submit(png("st2"), { ...good, scpn: "STORY_SESSION_2", frames_total: 1500 }, null, null, "like,subscribe,comment", "storyA");    // restarted: 0:50
+ok(r.status === "pass" && /8:02 in total/.test(r.message) && /earlier session/.test(r.message) && r.payout_code, `restarted session 0:50 + earlier 7:12 passes with credit (${r.message.slice(0, 70)}…)`);
+const credited = (await db.execute({ sql: "SELECT credited_to FROM submissions WHERE id=?", args: [s1] })).rows[0].credited_to;
+ok(Number(credited) === r.submission_id, "earlier session marked as credited to the passing one");
+r = await submit(png("st3"), { ...good, scpn: "STORY_SESSION_3", frames_total: 1500 }, null, null, "like,subscribe,comment", "storyA");
+ok(r.reason === "insufficient_watch_time" && !/earlier session/.test(r.message), "a credited session cannot be reused for another pass");
+// partial credit message
+r = await submit(png("st4"), { ...good, scpn: "STORY_B_1", frames_total: 9000 }, null, null, "like,subscribe,comment", "storyB");   // 5:00
+r = await submit(png("st5"), { ...good, scpn: "STORY_B_2", frames_total: 1800 }, null, null, "like,subscribe,comment", "storyB");   // 1:00
+ok(r.reason === "insufficient_watch_time" && /This session 1:00 \+ 5:00 from your earlier session = 6:00 total/.test(r.message) && /2 min more \(120 s\)/.test(r.message), "partial credit is explained in the message");
+
+// status lookup, incl. a code issued by manual approval
+let st = await fetch(`${base}/api/status?slug=${slug}&w=storyA`).then((r) => r.json());
+ok(st.found && st.status === "pass" && /^pw-/.test(st.payout_code), "status lookup returns the verified worker's code");
+st = await fetch(`${base}/api/status?slug=${slug}&w=storyb`).then((r) => r.json());
+ok(st.found && st.status === "fail" && /6:00 of 8:00 across your sessions/.test(st.next ?? "") && /2 min more/.test(st.next ?? ""), "status lookup is case-insensitive and reports the cross-session total");
+await db.execute({ sql: "UPDATE campaigns SET min_seconds = 120 WHERE id = ?", args: [cid] });
+const sbId = Number((await db.execute({ sql: "SELECT id FROM submissions WHERE campaign_id=? AND worker_ref='storyB' ORDER BY id DESC LIMIT 1", args: [cid] })).rows[0].id);
+await db.execute({ sql: "UPDATE submissions SET status='pass', reason='manual_override', payout_code='pw-manual01' WHERE id=?", args: [sbId] });
+st = await fetch(`${base}/api/status?slug=${slug}&w=storyB`).then((r) => r.json());
+ok(st.status === "pass" && st.payout_code === "pw-manual01" && /Approved by the employer/.test(st.message), "status lookup surfaces a manual approval and its code");
+st = await fetch(`${base}/api/status?slug=${slug}&w=nobody_here`).then((r) => r.json());
+ok(st.found === false, "status lookup for unknown worker says not found");
+const wpage2 = await fetch(`${base}/t/${slug}`).then((r) => r.text());
+ok(wpage2.includes("Check your status"), "worker page has the status box");
 
 // "couldn't find the video" report
 let nf = await fetch(`${base}/api/report`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug, kind: "not_found", worker_ref: "lost_01", src: "sg", keyword: "kw one", note: "only old videos" }) }).then((r) => r.json());

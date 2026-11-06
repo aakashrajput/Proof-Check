@@ -129,7 +129,7 @@ export type Campaign = {
   channel_title: string | null; channel_handle: string | null; min_frames: number; min_seconds: number;
   keywords: string; keyword_cursor: number; instructions: string; sg_job_id: string | null;
   status: string; created_at: string; proof_mode: "either" | "screenshot" | "text" | "both"; owner_id: number | null;
-  duration_seconds: number | null; thumbnail_url: string | null; attest: string; show_instructions: number;
+  duration_seconds: number | null; thumbnail_url: string | null; attest: string; show_instructions: number; cumulative_watch: number;
 };
 
 export const ATTEST_OPTIONS = [
@@ -152,7 +152,7 @@ export type Submission = {
   sha256_2: string | null; scpn: string | null; video_id_read: string | null; frames_total: number | null;
   frames_dropped: number | null; fps: number | null; watch_seconds: number | null; status: string;
   reason: string; payout_code: string | null; raw_json: string | null; created_at: string;
-  text_sha256: string | null; source: string | null; played_seconds: number | null; variant_id: number | null; attested: string | null; attempts: number; updated_at: string | null;
+  text_sha256: string | null; source: string | null; played_seconds: number | null; variant_id: number | null; attested: string | null; attempts: number; updated_at: string | null; credited_to: number | null;
 };
 
 /** 124 → "2:04" */

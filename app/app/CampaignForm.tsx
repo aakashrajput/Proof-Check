@@ -10,7 +10,7 @@ type Props = {
   mode: "create" | "edit";
   gemReady: boolean;
   initial?: { id?: number; name?: string; video_id?: string; video_title?: string | null; channel_title?: string | null; channel_handle?: string | null;
-    min_seconds?: number; min_frames?: number; keywords?: string; instructions?: string; proof_mode?: string; sg_job_id?: string | null; attest?: string; show_instructions?: number;
+    min_seconds?: number; min_frames?: number; keywords?: string; instructions?: string; proof_mode?: string; sg_job_id?: string | null; attest?: string; show_instructions?: number; cumulative_watch?: number;
     duration_seconds?: number | null; thumbnail_url?: string | null; variants?: VariantDraft[] };
 };
 
@@ -105,6 +105,12 @@ export default function CampaignForm({ action, mode, gemReady, initial = {} }: P
         </div>
         <div><label htmlFor="min_frames">Minimum frames (optional, used when fps isn't readable)</label><input id="min_frames" name="min_frames" type="number" min={0} defaultValue={initial.min_frames ?? 0} /></div>
       </div>
+
+      <label className="switch" style={{ marginTop: 10 }}>
+        <input type="checkbox" name="cumulative_watch" value="1" defaultChecked={initial.cumulative_watch === undefined ? true : !!initial.cumulative_watch} />
+        <span className="track" aria-hidden="true" />
+        <span><b>Add up watch time across a worker's sessions</b><span className="small muted" style={{ display: "block" }}>If a worker restarts the video, their earlier (unpaid) sessions still count toward the minimum. Each playback ID is only ever counted once. Off = every session must reach the minimum on its own.</span></span>
+      </label>
 
       <h3 style={{ marginTop: 18 }}>Title &amp; thumbnail variants <span className="muted" style={{ textTransform: "none", letterSpacing: 0 }}>— shown to workers so they recognise the video; they tell you which one they saw</span></h3>
       <div className="variants">

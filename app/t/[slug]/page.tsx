@@ -3,6 +3,7 @@ import { one, q, run, parseAttest, type Campaign, type Variant } from "@/lib/db"
 import UploadForm from "./UploadForm";
 import CopyBtn from "./Copy";
 import NotFound from "./NotFound";
+import Status from "./Status";
 
 export const dynamic = "force-dynamic";
 
@@ -121,7 +122,8 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
             <h2><span className="n accent">{stepBase + (showSteps ? 2 : 1)}</span> Submit your proof</h2>
             <UploadForm slug={c.slug} src={src ?? null} workerRef={w ?? null} disabled={closed} mode={mode} variants={vopts} attest={parseAttest(c.attest)} />
           </section>
-          <p className="small muted privacy">Only the panel reading and a small fingerprint are kept. Screenshots and debug text are discarded after checking.</p>
+          <section className="tcard"><Status slug={c.slug} initialWorker={w ?? null} /></section>
+          <p className="small muted privacy">Only the panel reading and your pasted text are kept for the employer's review. Screenshots are discarded after checking.</p>
         </aside>
       </main>
     </div>
