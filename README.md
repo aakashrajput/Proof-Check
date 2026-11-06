@@ -77,6 +77,20 @@ CRON_SECRET=anything BASE_URL=http://localhost:3000 node scripts/poll.mjs 10   #
 > Rating is blocked by SproutGigs while a job is `PAUSED_ADMIN` / `PENDING_REVIEW` / `PENDING_RESTART`, and a run of `not_ok`
 > ratings can auto-pause the job. Errors show up in the "last sync" box on the campaign page.
 
+## Database & migrations
+
+Schema lives in **`lib/schema.mjs`** (one source of truth). It is applied in two places, both idempotent:
+
+- **At deploy** — `npm run build` runs `scripts/migrate.mjs` against `DATABASE_URL` / `TURSO_DATABASE_URL`.
+  Creates missing tables, adds missing columns to older tables (`PRAGMA table_info` check), creates indexes,
+  and stamps `schema_meta.version`. If no remote DB is configured on Vercel it warns and exits 0.
+- **At runtime** — first query of each server instance calls the same `applySchema`, so a DB attached after
+  deploy still gets its schema without a redeploy.
+
+Adding a column: add it to the `CREATE TABLE` **and** to `COLUMNS` in `lib/schema.mjs`, bump `SCHEMA_VERSION`.
+Run locally with `npm run migrate`; `npm run migrate:strict` fails instead of warning when no DB is configured.
+`GET /api/health` shows the backend in use, whether it's ephemeral, which env vars are set (names only), and warnings.
+
 ## Tuning
 
 - **Text first**: set Accepted proof = `text` if you want zero AI spend; workers on the YouTube app and web both have "Copy debug info".
