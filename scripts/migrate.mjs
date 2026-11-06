@@ -36,6 +36,18 @@ if (!url) {
 }
 
 const target = url || "file:./data/proofcheck.db";
+
+// Common paste mistakes, caught before we even connect.
+const problems = [];
+if (url) {
+  if (/^https?:\/\//i.test(url)) problems.push(`DATABASE_URL starts with http(s):// — Turso URLs should start with libsql:// (got "${url.slice(0, 12)}…")`);
+  if (/\s/.test(url)) problems.push("DATABASE_URL contains whitespace — re-paste it without spaces/newlines");
+  if (!authToken && !url.startsWith("file:")) problems.push("DATABASE_AUTH_TOKEN is missing (remote libsql databases need a token)");
+  else if (authToken && /\s/.test(authToken)) problems.push("DATABASE_AUTH_TOKEN contains whitespace — re-paste it");
+  else if (authToken && !/^eyJ/.test(authToken)) problems.push("DATABASE_AUTH_TOKEN doesn't look like a Turso token (they start with eyJ)");
+}
+for (const p of problems) console.warn("[migrate] WARNING:", p);
+
 const client = createClient({ url: target, authToken });
 try {
   const t0 = Date.now();
@@ -44,5 +56,11 @@ try {
   console.log(`[migrate] ok → ${host} · schema v${rep.version} · ${rep.created} statements · columns added: ${rep.columnsAdded.length ? rep.columnsAdded.join(", ") : "none"} · ${Date.now() - t0}ms`);
 } catch (e) {
   console.error("[migrate] FAILED:", e.message ?? e);
+  if (onVercel && !strict) {
+    // Don't take the whole deploy down for a DB hiccup: the app applies the schema itself on first request,
+    // and /api/health shows the real error. Use --strict to make this fatal.
+    console.error("[migrate] Continuing the build anyway. Check /api/health after deploy — it will show the database error.");
+    process.exit(0);
+  }
   process.exit(1);
 }
