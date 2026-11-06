@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { q, dbInfo } from "@/lib/db";
+import { q, dbInfo, dbEnvNames } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +19,9 @@ export async function GET() {
   const info = dbInfo();
   const warnings: string[] = [];
   if (info.ephemeral) warnings.push("No persistent database configured: using /tmp SQLite, data is lost on every cold start. Connect Turso (Storage tab) or set DATABASE_URL.");
-  if (env.POSTGRES_URL && !env.TURSO_DATABASE_URL && !env.DATABASE_URL?.valueOf()) warnings.push("A Postgres database is attached but this app uses libSQL/Turso. Remove it and add Turso instead.");
+  if (info.backend === "libsql-remote" && !info.hasToken) warnings.push(`Found database URL in ${info.source} but no matching auth token variable.`);
+  if (env.POSTGRES_URL && info.backend === "sqlite-file") warnings.push("A Postgres database is attached but this app uses libSQL/Turso. Remove it and add Turso instead.");
   if (!env.ADMIN_PASSWORD) warnings.push("ADMIN_PASSWORD is not set; admin login is impossible.");
   if (!env.GEMINI_API_KEY) warnings.push("GEMINI_API_KEY not set: screenshot proof goes to manual review; text proof works.");
-  return NextResponse.json({ ok: db.ok, db: { ...info, ...db }, env, warnings, vercel: !!process.env.VERCEL, region: process.env.VERCEL_REGION ?? null, at: new Date().toISOString() });
+  return NextResponse.json({ ok: db.ok, db: { ...info, ...db }, env, dbEnvNames: dbEnvNames(), warnings, vercel: !!process.env.VERCEL, region: process.env.VERCEL_REGION ?? null, at: new Date().toISOString() });
 }

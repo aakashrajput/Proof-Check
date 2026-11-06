@@ -9,8 +9,7 @@ let ready: Promise<void> | null = null;
 export function db(): Client {
   if (!client) {
     // Vercel Marketplace's Turso integration injects TURSO_DATABASE_URL / TURSO_AUTH_TOKEN automatically.
-    const url = process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL || defaultFileUrl();
-    const authToken = process.env.DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN;
+    const { url, authToken } = resolveDb();
     client = createClient({ url, authToken });
   }
   return client;
@@ -21,15 +20,43 @@ function defaultFileUrl() {
   return process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME ? "file:/tmp/proofcheck.db" : "file:./data/proofcheck.db";
 }
 
+/**
+ * Resolve the database connection. Order:
+ *  1. DATABASE_URL (+ DATABASE_AUTH_TOKEN)
+ *  2. TURSO_DATABASE_URL (+ TURSO_AUTH_TOKEN)
+ *  3. any env var whose value is a libsql:// or *.turso.io URL (marketplace integrations use their own prefixes),
+ *     paired with a token var sharing its prefix (…AUTH_TOKEN / …TOKEN)
+ *  4. local file (ephemeral /tmp on Vercel)
+ */
+export function resolveDb(): { url: string; authToken?: string; source: string } {
+  const e = process.env;
+  if (e.DATABASE_URL) return { url: e.DATABASE_URL, authToken: e.DATABASE_AUTH_TOKEN || e.TURSO_AUTH_TOKEN, source: "DATABASE_URL" };
+  if (e.TURSO_DATABASE_URL) return { url: e.TURSO_DATABASE_URL, authToken: e.TURSO_AUTH_TOKEN, source: "TURSO_DATABASE_URL" };
+  for (const [k, v] of Object.entries(e)) {
+    if (!v || !/^(libsql:\/\/|https?:\/\/[^/]*\.turso\.io|wss?:\/\/[^/]*\.turso\.io)/i.test(v)) continue;
+    const prefix = k.replace(/(DATABASE_|DB_)?URL$/i, "");
+    const token = e[prefix + "AUTH_TOKEN"] || e[prefix + "DATABASE_AUTH_TOKEN"] || e[prefix + "DB_AUTH_TOKEN"] || e[prefix + "TOKEN"] || e[prefix + "DATABASE_TOKEN"]
+      || Object.entries(e).find(([kk, vv]) => kk.startsWith(prefix) && /TOKEN/i.test(kk) && !!vv)?.[1];
+    return { url: v, authToken: token, source: k };
+  }
+  return { url: defaultFileUrl(), source: "file" };
+}
+
 /** True when no persistent database is configured (ephemeral /tmp fallback in use). */
 export function dbIsEphemeral() {
-  return !process.env.DATABASE_URL && !process.env.TURSO_DATABASE_URL && !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  return resolveDb().url.startsWith("file:/tmp/");
+}
+
+/** Env var names that look database-related (names only, never values) — for /api/health. */
+export function dbEnvNames() {
+  return Object.keys(process.env).filter((k) => /TURSO|LIBSQL|DATABASE|POSTGRES|NEON|SUPABASE|UPSTASH|KV_|REDIS|MONGO|PLANETSCALE|_URL$|TOKEN$/i.test(k) && !/^(VERCEL_|NEXT_|NODE_|npm_|AWS_)/.test(k)).sort();
 }
 
 /** Which backend is in use, for diagnostics (never includes secrets). */
 export function dbInfo() {
-  const url = process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL || defaultFileUrl();
-  return { backend: url.startsWith("file:") ? "sqlite-file" : "libsql-remote", host: url.startsWith("file:") ? url : new URL(url).host, ephemeral: dbIsEphemeral() };
+  const { url, authToken, source } = resolveDb();
+  let host = url; try { if (!url.startsWith("file:")) host = new URL(url).host; } catch { /* keep raw */ }
+  return { backend: url.startsWith("file:") ? "sqlite-file" : "libsql-remote", host, source, hasToken: !!authToken, ephemeral: dbIsEphemeral() };
 }
 
 

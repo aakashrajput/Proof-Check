@@ -10,8 +10,20 @@
 import { createClient } from "@libsql/client";
 import { applySchema, SCHEMA_VERSION } from "../lib/schema.mjs";
 
-const url = process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL;
-const authToken = process.env.DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN;
+let url = process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL;
+let authToken = process.env.DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN;
+if (!url) {
+  // Marketplace integrations may use their own prefix: find any libsql / turso URL and a token sharing its prefix.
+  for (const [k, v] of Object.entries(process.env)) {
+    if (!v || !/^(libsql:\/\/|https?:\/\/[^/]*\.turso\.io|wss?:\/\/[^/]*\.turso\.io)/i.test(v)) continue;
+    const prefix = k.replace(/(DATABASE_|DB_)?URL$/i, "");
+    url = v;
+    authToken = process.env[prefix + "AUTH_TOKEN"] || process.env[prefix + "DATABASE_AUTH_TOKEN"] || process.env[prefix + "TOKEN"]
+      || Object.entries(process.env).find(([kk, vv]) => kk.startsWith(prefix) && /TOKEN/i.test(kk) && !!vv)?.[1];
+    console.log(`[migrate] using database URL from ${k}${authToken ? "" : " (no token found)"}`);
+    break;
+  }
+}
 const onVercel = !!process.env.VERCEL;
 const strict = process.argv.includes("--strict");
 
