@@ -38,6 +38,25 @@ const forged = `${cookie.split("=")[1].split(".")[0]}.9999999999.forgedsig`;
 const f = await fetch(`${base}/app`, { headers: { cookie: `pc_session=${forged}` }, redirect: "manual" });
 ok(f.status === 307 || f.status === 302, "forged session cookie is rejected");
 const uid = Number((await db.execute({ sql: "SELECT id FROM users WHERE email=?", args: [email] })).rows[0].id);
+// stale-but-valid session (user row gone): must end on /login with the cookie cleared, never loop
+{
+  const ghost = `ghost-${randomBytes(3).toString("hex")}@example.com`;
+  const g = await fetch(`${base}/api/auth/register`, { method: "POST", body: new URLSearchParams({ email: ghost, password: "correct horse battery" }), redirect: "manual" });
+  const gcookie = g.headers.get("set-cookie").split(";")[0];
+  await db.execute({ sql: "DELETE FROM users WHERE email=?", args: [ghost] });
+  let url = `${base}/app`, hops = 0, cleared = false, final = "";
+  while (hops < 6) {
+    const r = await fetch(url, { headers: { cookie: gcookie }, redirect: "manual" });
+    const sc = r.headers.get("set-cookie") ?? "";
+    if (/pc_session=;|Max-Age=0/i.test(sc)) cleared = true;
+    const loc = r.headers.get("location");
+    if (!loc) { final = url; break; }
+    url = new URL(loc, base).toString(); hops++;
+  }
+  ok(hops < 6 && cleared && /\/login/.test(final), `stale session resolves to /login in ${hops} hops with cookie cleared (no loop)`);
+  const lp = await fetch(`${base}/login`, { headers: { cookie: gcookie } }).then((r) => r.status);
+  ok(lp === 200, "login page renders (200) even with a stale cookie");
+}
 
 // create campaign directly in DB (server action needs RSC plumbing; API path is what workers hit)
 const slug = "T" + randomBytes(3).toString("hex");

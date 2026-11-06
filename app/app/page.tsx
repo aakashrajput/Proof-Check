@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { q, dbIsEphemeral, type Campaign } from "@/lib/db";
-import { currentUser } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { sgCredsFor } from "@/lib/sproutgigs";
 import { createCampaign } from "./actions";
 import Header from "./Header";
@@ -12,8 +11,7 @@ export const dynamic = "force-dynamic";
 type Row = Campaign & { total: number; passed: number; failed: number; review: number; opened: number };
 
 export default async function Dashboard({ searchParams }: { searchParams: Promise<{ e?: string; welcome?: string }> }) {
-  const u = await currentUser();
-  if (!u) redirect("/login");
+  const u = await requireUser("/app");
   const { e, welcome } = await searchParams;
   let rows: Row[] = []; let dbError: string | null = null;
   try {

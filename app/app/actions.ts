@@ -6,13 +6,9 @@ import { run, one, type Campaign, type User } from "@/lib/db";
 import { parseVideoId, resolveVideo } from "@/lib/youtube";
 import { overridePass, overrideFail } from "@/lib/verify";
 import { sgFor, syncCampaign, sgCredsFor } from "@/lib/sproutgigs";
-import { currentUser, encrypt } from "@/lib/auth";
+import { requireUser, encrypt } from "@/lib/auth";
 
-async function me(): Promise<User> {
-  const u = await currentUser();
-  if (!u) redirect("/login");
-  return u;
-}
+async function me(): Promise<User> { return requireUser(); }
 
 /** Load a campaign only if it belongs to the signed-in user. */
 async function own(id: number, u: User): Promise<Campaign> {

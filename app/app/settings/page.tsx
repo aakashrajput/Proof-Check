@@ -1,13 +1,11 @@
-import { redirect } from "next/navigation";
-import { currentUser } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { saveSettings, testSproutGigs } from "../actions";
 import Header from "../Header";
 
 export const dynamic = "force-dynamic";
 
 export default async function Settings({ searchParams }: { searchParams: Promise<{ saved?: string; ok?: string; e?: string }> }) {
-  const u = await currentUser();
-  if (!u) redirect("/login");
+  const u = await requireUser("/app/settings");
   const { saved, ok, e } = await searchParams;
   const hasSecret = !!u.sg_secret_enc;
   return (

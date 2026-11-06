@@ -1,8 +1,8 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { one, q, type Campaign, type Submission, type Variant } from "@/lib/db";
 import CampaignForm from "../../CampaignForm";
-import { currentUser } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { sgCredsFor } from "@/lib/sproutgigs";
 import { updateCampaign, setStatus, override, syncNow } from "../../actions";
 import Header from "../../Header";
@@ -11,9 +11,8 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 export default async function CampaignPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ created?: string; saved?: string }> }) {
-  const u = await currentUser();
-  if (!u) redirect("/login");
   const { id } = await params;
+  const u = await requireUser(`/app/c/${id}`);
   const { created, saved } = await searchParams;
   const c = await one<Campaign>("SELECT * FROM campaigns WHERE id = ? AND owner_id = ?", [Number(id), u.id]);
   if (!c) notFound();

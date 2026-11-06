@@ -11,10 +11,6 @@ export function proxy(req: NextRequest) {
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
-  if ((pathname === "/login" || pathname === "/register") && uid) {
-    const url = req.nextUrl.clone(); url.pathname = "/app"; url.search = "";
-    return NextResponse.redirect(url);
-  }
   if (pathname.startsWith("/admin")) {
     const url = req.nextUrl.clone(); url.pathname = pathname.replace(/^\/admin/, "/app") || "/app";
     return NextResponse.redirect(url);
@@ -22,4 +18,4 @@ export function proxy(req: NextRequest) {
   return NextResponse.next();
 }
 
-export const config = { matcher: ["/app/:path*", "/app", "/admin/:path*", "/admin", "/login", "/register"] };
+export const config = { matcher: ["/app/:path*", "/app", "/admin/:path*", "/admin"] };

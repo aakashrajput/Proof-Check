@@ -2,6 +2,7 @@
 // Signing/encryption key: AUTH_SECRET, falling back to ADMIN_PASSWORD so existing deployments keep working.
 import { createHmac, timingSafeEqual, randomBytes, scryptSync, createCipheriv, createDecipheriv, createHash } from "crypto";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { one, type User } from "./db";
 
 export const SESSION_COOKIE = "pc_session";
@@ -57,6 +58,21 @@ export async function currentUser(): Promise<User | null> {
   const id = parseSession(c.get(SESSION_COOKIE)?.value);
   if (!id) return null;
   return one<User>("SELECT * FROM users WHERE id = ?", [id]);
+}
+
+/**
+ * For pages under /app. Returns the user, or redirects. A cookie that verifies but points at a user
+ * that no longer exists (e.g. created before the database was attached) is cleared via the logout
+ * route so the browser can't ping-pong between /app and /login.
+ */
+export async function requireUser(nextPath = "/app"): Promise<User> {
+  const c = await cookies();
+  const raw = c.get(SESSION_COOKIE)?.value;
+  const id = parseSession(raw);
+  if (!id) redirect(`/login?next=${encodeURIComponent(nextPath)}`);
+  const u = await one<User>("SELECT * FROM users WHERE id = ?", [id]);
+  if (!u) redirect(`/api/auth/logout?next=${encodeURIComponent("/login?e=" + encodeURIComponent("Your session was out of date. Please sign in again."))}`);
+  return u!;
 }
 
 // ---- secrets at rest (per-user SproutGigs API secret) ----

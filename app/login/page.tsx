@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { currentUser } from "@/lib/auth";
 
 export default async function Login({ searchParams }: { searchParams: Promise<{ next?: string; e?: string }> }) {
+  if (await currentUser()) redirect("/app");
   const { next, e } = await searchParams;
   return (
     <div className="wrap narrow">
