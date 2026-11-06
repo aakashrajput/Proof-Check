@@ -10,7 +10,7 @@ type Props = {
   mode: "create" | "edit";
   gemReady: boolean;
   initial?: { id?: number; name?: string; video_id?: string; video_title?: string | null; channel_title?: string | null; channel_handle?: string | null;
-    min_seconds?: number; min_frames?: number; keywords?: string; instructions?: string; proof_mode?: string; sg_job_id?: string | null; attest?: string;
+    min_seconds?: number; min_frames?: number; keywords?: string; instructions?: string; proof_mode?: string; sg_job_id?: string | null; attest?: string; show_instructions?: number;
     duration_seconds?: number | null; thumbnail_url?: string | null; variants?: VariantDraft[] };
 };
 
@@ -27,6 +27,7 @@ export default function CampaignForm({ action, mode, gemReady, initial = {} }: P
   const [minSeconds, setMinSeconds] = useState<number>(initial.min_seconds ?? 120);
   const minMinutes = Math.round((minSeconds / 60) * 100) / 100;
   const [variants, setVariants] = useState<VariantDraft[]>(initial.variants?.length ? initial.variants : [{ label: "A", title: initial.video_title ?? "", thumb_url: initial.thumbnail_url ?? null, thumb_data: null }]);
+  const [showSteps, setShowSteps] = useState<boolean>(initial.show_instructions === undefined ? true : !!initial.show_instructions);
   const [askConfirm, setAskConfirm] = useState<boolean>(initial.attest === undefined ? true : (initial.attest ?? "").trim().length > 0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastId = useRef<string | null>(initial.video_id ?? null);
@@ -135,8 +136,16 @@ export default function CampaignForm({ action, mode, gemReady, initial = {} }: P
 
       <label htmlFor="keywords">Search keywords — one per line, rotated evenly across workers</label>
       <textarea id="keywords" name="keywords" rows={4} defaultValue={initial.keywords ?? ""} placeholder={"best budget phone 2026 review\nbudget phone camera test"} />
-      <label htmlFor="instructions">Custom instructions (optional — a default step list is shown if blank)</label>
-      <textarea id="instructions" name="instructions" rows={3} defaultValue={initial.instructions ?? ""} />
+      <h3 style={{ marginTop: 18 }}>Instructions on the worker page</h3>
+      <label className="switch">
+        <input type="checkbox" name="show_instructions" value="1" checked={showSteps} onChange={(e) => setShowSteps(e.target.checked)} />
+        <span className="track" aria-hidden="true" />
+        <span><b>Show the step-by-step instructions card</b><span className="small muted" style={{ display: "block" }}>The numbered "Watch, then copy your proof" steps. Off = hidden; the keyword, requirements and the "How do I get the debug info?" hint still show.</span></span>
+      </label>
+      <div style={{ marginLeft: 46, opacity: showSteps ? 1 : .4 }}>
+        <label htmlFor="instructions">Custom instructions (optional — a default step list is shown if blank)</label>
+        <textarea id="instructions" name="instructions" rows={3} defaultValue={initial.instructions ?? ""} disabled={!showSteps} />
+      </div>
       <div className="row">
         <div><label htmlFor="proof_mode">Accepted proof</label>
           <select id="proof_mode" name="proof_mode" defaultValue={initial.proof_mode ?? (gemReady ? "either" : "text")}>

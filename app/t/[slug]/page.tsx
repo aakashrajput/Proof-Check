@@ -30,6 +30,8 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
   const title = c.video_title ?? c.video_id;
   const channel = c.channel_handle ?? c.channel_title;
   const mode = c.proof_mode ?? "either";
+  const showSteps = c.show_instructions !== 0;
+  const stepBase = (variants.length ? 1 : 0) + (keyword ? 1 : 0);
   const vopts = variants.map((v) => ({ id: v.id, label: v.label, title: v.title || title, thumb: v.thumb_data ?? v.thumb_url ?? `https://i.ytimg.com/vi/${c.video_id}/mqdefault.jpg` }));
 
   return (
@@ -84,8 +86,8 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
             </section>
           )}
 
-          <section className="tcard">
-            <h2><span className="n">{(variants.length ? 1 : 0) + (keyword ? 1 : 0) + 1}</span> Watch, then copy your proof</h2>
+          {showSteps && <section className="tcard">
+            <h2><span className="n">{stepBase + 1}</span> Watch, then copy your proof</h2>
             {c.instructions ? <div className="custom-steps">{c.instructions}</div> : (
               <ol className="timeline">
                 <li><b>Play the video{minTxt ? <> for at least {minTxt}</> : null}.</b><span>Muted or in another tab is fine. Skipping ahead doesn't count — played time comes from YouTube's own data.</span></li>
@@ -97,7 +99,7 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
               </ol>
             )}
             <div className="helplinks small muted">How to open Stats for nerds: <a href="https://youtu.be/DiFh80eNYsM" target="_blank" rel="noreferrer">📱 phone</a> · <a href="https://youtu.be/_CZmpnAcYSw" target="_blank" rel="noreferrer">💻 computer</a></div>
-          </section>
+          </section>}
 
           <section className="tcard rules">
             <h2>What gets a proof declined</h2>
@@ -114,7 +116,7 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
 
         <aside className="tright">
           <section className="tcard submit">
-            <h2><span className="n accent">{(variants.length ? 1 : 0) + (keyword ? 1 : 0) + 2}</span> Submit your proof</h2>
+            <h2><span className="n accent">{stepBase + (showSteps ? 2 : 1)}</span> Submit your proof</h2>
             <UploadForm slug={c.slug} src={src ?? null} workerRef={w ?? null} disabled={closed} mode={mode} variants={vopts} attest={parseAttest(c.attest)} />
           </section>
           <p className="small muted privacy">Only the panel reading and a small fingerprint are kept. Screenshots and debug text are discarded after checking.</p>

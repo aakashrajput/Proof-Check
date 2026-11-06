@@ -129,7 +129,7 @@ export type Campaign = {
   channel_title: string | null; channel_handle: string | null; min_frames: number; min_seconds: number;
   keywords: string; keyword_cursor: number; instructions: string; sg_job_id: string | null;
   status: string; created_at: string; proof_mode: "either" | "screenshot" | "text" | "both"; owner_id: number | null;
-  duration_seconds: number | null; thumbnail_url: string | null; attest: string;
+  duration_seconds: number | null; thumbnail_url: string | null; attest: string; show_instructions: number;
 };
 
 export const ATTEST_OPTIONS = [
