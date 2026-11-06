@@ -177,6 +177,8 @@ r = await submit(null, null, dbg({ cpn: "Cc1Bb2Cc3Dd4Ee5F", timestamp: Date.now(
 ok(r.reason === "stale_proof", "48h-old debug info rejected as stale");
 r = await submit(null, null, dbg({ cpn: "Dd1Bb2Cc3Dd4Ee5F", vpl: "0.000-500.000" }));
 ok(r.reason === "text_invalid", "played > duration rejected as tampered");
+r = await submit(null, null, `atform":"mobile","cff":"SMALL_FORM_FACTOR","c":"android","cplayer":"PLATYPUS","cmodel":"V2430","cos":"Android","cver":"21.44.534","cbr":"com.google.android.youtube"`, null, "like,subscribe,comment", "andro_01");
+ok(r.reason === "text_cut_off" && /Android/.test(r.message) && /copy icon/i.test(r.message) && /cut off/.test(r.message), "cut-off Android paste gets a specific 'use the copy icon' message");
 r = await submit(null, null, "hello i watched the video pls approve");
 ok(r.reason === "text_unreadable", "free text rejected as unreadable");
 const unread = (await db.execute({ sql: "SELECT raw_json FROM submissions WHERE id=?", args: [r.submission_id] })).rows[0].raw_json;

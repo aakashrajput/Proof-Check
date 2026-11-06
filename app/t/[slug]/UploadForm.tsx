@@ -58,6 +58,10 @@ export default function UploadForm({ slug, src, workerRef, disabled, mode, varia
         <label>{mode === "both" ? "1. Debug info text (required)" : mode === "text" ? "Debug info text" : "Option A — paste debug info (fastest, most reliable)"}</label>
         <textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} disabled={disabled}
           placeholder={'Paste the "Copy debug info" text here. It starts with {"ns":"yt",…'} spellCheck={false} />
+        {text.trim().length > 0 && (() => {
+          const t = text.trim(); const startsOk = /^\{\s*"ns"/.test(t) || /Video\s*ID/i.test(t); const hasIds = /"cpn"|"docid"|s?CPN/i.test(t);
+          return <p className={`small pastecheck ${startsOk && hasIds ? "ok" : "bad"}`}>{startsOk && hasIds ? "✓ Looks like complete debug info" : !startsOk && /"(c|cplayer|cplatform|cver)"\s*:/.test(t) ? "✗ This paste is cut off (it should start with {\"ns\":\"yt\"). Use the panel's copy icon, not text selection." : "✗ This doesn't look like debug info yet"}</p>;
+        })()}
         <details className="hint">
           <summary>How do I get the debug info?</summary>
           <div className="hint-body">
@@ -71,12 +75,12 @@ export default function UploadForm({ slug, src, workerRef, disabled, mode, varia
               </ol>
             </div>
             <div className="hint-col">
-              <b>📱 YouTube app</b>
+              <b>📱 YouTube app (Android / iPhone)</b>
               <ol>
                 <li>Tap the video once, then tap the <b>⚙️ gear</b> (or <b>⋮</b>) on the player.</li>
                 <li>Tap <b>Stats for nerds</b>. If it's missing, turn it on once: profile → Settings → General → <i>Stats for nerds</i>.</li>
-                <li>Tap the <b>copy icon</b> in the panel's corner.</li>
-                <li>Long-press the box above → <b>Paste</b>.</li>
+                <li>Tap the small <b>copy icon ⧉</b> in the panel's top-right corner. <b>Don't select the text by hand</b> — that copies only part of it.</li>
+                <li>Long-press the box above → <b>Paste</b>. It must begin with <span className="mono">{"{\"ns\":\"yt\""}</span>.</li>
               </ol>
             </div>
             <div className="hint-mock" aria-hidden="true">

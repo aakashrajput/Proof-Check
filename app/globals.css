@@ -209,3 +209,5 @@ table.subs .mono { font-family: var(--mono); font-size: 12px; }
 .nf-form { border: 1px dashed var(--line); border-radius: 10px; padding: 12px; margin-top: 4px; }
 .nf.done { border: 1px solid rgba(255,181,71,.5); background: rgba(255,181,71,.06); border-radius: 10px; padding: 12px; }
 .nf.done ul { margin: 6px 0; padding-left: 18px; } .nf.done li { margin: 3px 0; }
+
+.pastecheck { margin: 4px 0 0; } .pastecheck.ok { color: var(--ok); } .pastecheck.bad { color: var(--warn); }
