@@ -56,9 +56,9 @@ const lkOk = await fetch(`${base}/api/youtube/lookup?v=https://youtu.be/${VIDEO}
 ok(lkOk.videoId === VIDEO && lkOk.thumbnails?.high?.includes(VIDEO), "youtube lookup parses URL and returns thumbnail URLs (title needs network)");
 
 const page = await fetch(`${base}/t/${slug}?src=sg`).then((r) => r.text());
-ok(page.includes("Title A — original") && page.includes("Title B — test") && page.includes("looks like one of these"), "worker page shows A/B variants");
+ok(page.includes("Title A — original") && page.includes("Title B — test") && page.includes("Recognise the video"), "worker page shows A/B variants");
 ok(page.includes("kw one") || page.includes("kw two"), "worker page renders a keyword");
-ok(page.includes("what gets a proof declined") && page.includes("2:00 min"), "worker page shows requirements card with min watch time");
+ok(page.includes("What gets a proof declined") && page.includes("2:00 min"), "worker page shows requirements card with min watch time");
 const other = await fetch(`${base}/app/c/${(await db.execute({ sql: "SELECT id FROM campaigns WHERE slug=?", args: [slug] })).rows[0].id}`, { headers: { cookie } }).then((r) => r.status);
 ok(other === 200, "owner can open campaign page");
 const stranger = await fetch(`${base}/api/auth/register`, { method: "POST", body: new URLSearchParams({ email: "x" + email, password: "correct horse battery" }), redirect: "manual" });
