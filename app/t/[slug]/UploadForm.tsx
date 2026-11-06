@@ -82,6 +82,7 @@ export default function UploadForm({ slug, src, workerRef, disabled, mode, varia
                 <li>Tap the small <b>copy icon ⧉</b> in the panel's top-right corner. <b>Don't select the text by hand</b> — that copies only part of it.</li>
                 <li>Long-press the box above → <b>Paste</b>. It starts with <span className="mono">{"{"}</span> and ends with <span className="mono">{"}"}</span>.</li>
               </ol>
+              <p className="small muted" style={{ marginTop: 6 }}><b>iPhone:</b> the app's debug info has no watch time, so you'll paste <b>twice</b> — once now (starts a timer), once after the minimum time, same video still playing. The page tells you when.</p>
             </div>
             <div className="hint-mock" aria-hidden="true">
               <div className="mock-menu"><span>Loop</span><span>Copy video URL</span><span>Copy video URL at current time</span><span>Copy embed code</span><span className="hl">Stats for nerds</span></div>

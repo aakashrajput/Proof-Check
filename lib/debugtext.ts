@@ -12,7 +12,7 @@ export type TextRead = {
   played_seconds: number | null; // sum of played ranges (vpl) — true watch time, skips excluded
   timestamp_ms: number | null;   // when the debug info was copied
   platform: string | null;
-  format: "json" | "lines" | "unknown";
+  format: "json" | "ios" | "lines" | "unknown";
   problems: string[];
 };
 
@@ -27,6 +27,19 @@ export function parseDebugText(input: string): TextRead {
     played_seconds: null, timestamp_ms: null, platform: null, format: "unknown", problems: [] };
   const text = input.trim();
   if (!text) { out.problems.push("empty"); return out; }
+
+  // 0. iPhone app: Apple property-list style  { CPN = xxx; videoID = "yyy"; date = "2026-11-06 20:59:16 +0000"; debugParameters = {...}; }
+  if (/\bCPN\s*=\s*[A-Za-z0-9_-]{8,}\s*;/.test(text) && /\bvideoID\s*=|\bdocid\s*=/.test(text)) {
+    out.format = "ios";
+    out.scpn = text.match(/\bCPN\s*=\s*"?([A-Za-z0-9_-]{8,24})"?\s*;/)?.[1] ?? null;
+    out.video_id = text.match(/\bvideoID\s*=\s*\\?"?([A-Za-z0-9_-]{11})\\?"?\s*;/)?.[1] ?? text.match(/docid\s*=\s*\\?"?([A-Za-z0-9_-]{11})/)?.[1] ?? null;
+    const d = text.match(/\bdate\s*=\s*"([^"]+)"/)?.[1];
+    if (d) { const ms = Date.parse(d.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) ([+-]\d{4})$/, "$1T$2$3")); out.timestamp_ms = Number.isFinite(ms) ? ms : null; }
+    out.platform = "ios";
+    // No watch-time fields in this format: verify.ts measures time between two pastes of the same CPN instead.
+    if (!out.scpn) out.problems.push("no_cpn"); if (!out.video_id) out.problems.push("no_video_id");
+    return out;
+  }
 
   // 1. JSON blob (possibly wrapped in other text)
   const start = text.indexOf("{"), end = text.lastIndexOf("}");

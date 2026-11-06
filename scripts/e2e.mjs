@@ -206,6 +206,22 @@ r = await submit(null, null, dbg({ cpn: "Jj1Bb2Cc3Dd4Ee5F" }));
 ok(r.reason === "both_required", "proof_mode=both rejects text-only");
 await db.execute({ sql: "UPDATE campaigns SET proof_mode='either' WHERE id=?", args: [cid] });
 
+// iPhone: plist-style debug info, two-paste timing on the server clock
+const iosText = (cpn, when) => `{\n    CPN = ${cpn};\n    date = "${when}";\n    debugParameters =     {\n        ad = none;\n        mlplayer = "{\\n    docid = \\"${VIDEO}\\";\\n    rate = 1;\\n}";\n        resolution = 360p;\n        state = 6;\n    };\n    videoID = "${VIDEO}";\n}`;
+let tick = 0; const nowIso = () => new Date(Date.now() + (tick++) * 1000).toISOString().slice(0, 19).replace("T", " ") + " +0000";
+r = await submit(null, null, iosText("IosNonce00000001", nowIso()), null, "like,subscribe,comment", "ios_01");
+ok(r.reason === "second_paste_needed" && /Timer started/.test(r.message) && /2:00/.test(r.message), "iPhone first paste starts the timer and asks for a second paste");
+const iosRow = r.submission_id;
+r = await submit(null, null, iosText("IosNonce00000001", nowIso()), null, "like,subscribe,comment", "ios_01");
+ok(r.reason === "insufficient_watch_time" && /first paste was 0:0\d ago/.test(r.message) && r.submission_id === iosRow, "second paste too soon → still short, same row");
+await db.execute({ sql: "UPDATE submissions SET created_at = datetime('now', '-130 seconds') WHERE id = ?", args: [iosRow] });
+r = await submit(null, null, iosText("IosNonce00000001", nowIso()), null, "like,subscribe,comment", "ios_01");
+ok(r.status === "pass" && r.submission_id === iosRow && Math.round(r.details.watch_seconds) >= 130, `iPhone second paste after 130 s passes with measured time (${Math.round(r.details.watch_seconds)} s)`);
+r = await submit(null, null, iosText("IosNonce00000001", nowIso()), null, "like,subscribe,comment", "ios_02");
+ok(r.reason === "reused_playback", "a third paste of the same iPhone CPN after payout is rejected as reused");
+r = await submit(null, null, iosText("IosNonce00000002", nowIso()).replaceAll(VIDEO, "xxxxxxxxxxx"), null, "like,subscribe,comment", "ios_03");
+ok(r.reason === "wrong_video", "iPhone paste from the wrong video is rejected before the timer starts");
+
 // "couldn't find the video" report
 let nf = await fetch(`${base}/api/report`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug, kind: "not_found", worker_ref: "lost_01", src: "sg", keyword: "kw one", note: "only old videos" }) }).then((r) => r.json());
 ok(nf.ok === true, "not-found report accepted");

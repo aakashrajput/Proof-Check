@@ -22,7 +22,7 @@ function buildChecks(c: Campaign, ctx: Ctx, status: string, reason: string): Che
   const out: Check[] = [];
   const readable = !!(ctx.video_id && ctx.scpn);
   out.push({ key: "readable", label: "Proof readable", state: readable ? "ok" : "fail",
-    detail: readable ? (ctx.source === "text" ? "debug info parsed" : ctx.source === "both" ? "debug info + screenshot" : "panel read from screenshot")
+    detail: readable ? (ctx.text?.format === "ios" ? "iPhone debug info parsed" : ctx.source === "text" ? "debug info parsed" : ctx.source === "both" ? "debug info + screenshot" : "panel read from screenshot")
       : ["duplicate_screenshot", "duplicate_text"].includes(reason) ? "this exact proof was already submitted"
       : reason === "text_unreadable" ? "pasted text isn't YouTube debug info"
       : reason === "text_cut_off" ? "paste is cut off — video ID / playback ID missing"
@@ -60,6 +60,7 @@ const FIX: Record<string, string> = {
   duplicate_screenshot: "Watch the video again in a fresh session and take a new screenshot. Reusing a screenshot — yours or anyone else's — is always declined.",
   duplicate_text: "Watch the video again and copy fresh debug info. Re-pasting the same text is always declined.",
   text_unreadable: "Open the video, tap ⋮ (or right-click the player) → Stats for nerds → Copy debug info, and paste the whole thing without editing.",
+  second_paste_needed: "Leave the video playing. After the minimum time, open Stats for nerds again → copy → paste here. Same video, same session (don't close or reload it), and your second paste completes the check.",
   text_cut_off: "Go back to the video (keep it playing), open Stats for nerds, tap the COPY icon in the panel — don't select text by hand — then come back, long-press the box and Paste the whole text.",
   text_invalid: "Copy the debug info again without changing anything. Edited numbers are detected and declined.",
   stale_proof: "Watch the video again now and copy fresh debug info — proof must be recent.",
@@ -130,8 +131,9 @@ export async function verifySubmission(
   if (hasText) {
     const dupe = await one<Submission>("SELECT * FROM submissions WHERE text_sha256 = ? ORDER BY id DESC LIMIT 1", [ctx.text_sha]);
     if (dupe && dupe.status === "pass") return fail(campaign, meta, ctx, "duplicate_text", "This exact debug info was already used for a payout. Watch again and copy fresh debug info.");
-    if (dupe && dupe.campaign_id === campaign.id) {
+    if (dupe && dupe.campaign_id === campaign.id && dupe.reason !== "second_paste_needed") {
       // Same text as a previous failed attempt: nothing new to check. Repeat the verdict with concrete guidance.
+      // (A pending iPhone timer is excluded: an identical re-paste must still reach the elapsed-time check below.)
       await run("UPDATE submissions SET attempts = attempts + 1, updated_at = datetime('now'), worker_ref = COALESCE(?, worker_ref) WHERE id = ?", [meta.worker_ref ?? null, dupe.id]);
       const minS = campaign.min_seconds || 0;
       let msg = "This is the same text as your last attempt, so nothing has changed.";
@@ -217,6 +219,24 @@ export async function verifySubmission(
 
   // 6. Watch time
   const minFrames = campaign.min_frames || 0, minSeconds = campaign.min_seconds || 0;
+  // 6a. Text proof without watch-time fields (iPhone app): measure the gap between two pastes of the SAME playback,
+  //     on the server clock. First paste opens the timer; a later paste with the same CPN closes it.
+  if (minSeconds > 0 && ctx.watch == null && hasText && ctx.text && ctx.text.format === "ios" && ctx.scpn) {
+    const first = await one<{ id: number; created_at: string; attempts: number }>("SELECT id, created_at, attempts FROM submissions WHERE campaign_id = ? AND scpn = ? AND status != 'pass' ORDER BY id ASC LIMIT 1", [campaign.id, ctx.scpn]);
+    if (!first) {
+      ctx.note = "ios timer started";
+      return fail(campaign, meta, ctx, "second_paste_needed",
+        `iPhone's debug info doesn't include watch time, so we time it between two pastes. Timer started now. Keep this video playing — don't close or reload it — and after ${mmss(minSeconds)} open Stats for nerds again, copy, and paste the new text here.`);
+    }
+    const elapsed = (Date.now() - Date.parse(first.created_at.replace(" ", "T") + "Z")) / 1000;
+    if (elapsed < minSeconds) {
+      const more = Math.max(1, Math.ceil(minSeconds - elapsed));
+      ctx.watch = elapsed;
+      return fail(campaign, meta, ctx, "insufficient_watch_time",
+        `Your first paste was ${mmss(elapsed)} ago — this task needs ${mmss(minSeconds)}. Keep the video playing ${humanDur(more)} more (${more} s), then copy and paste the debug info again (same video, don't reload).`);
+    }
+    ctx.watch = elapsed; ctx.played = elapsed;
+  }
   if (minSeconds > 0) {
     if (ctx.watch == null) {
       if (!(minFrames > 0 && ctx.frames_total != null)) return review(campaign, meta, ctx, "watch_time_unreadable", "We could not determine the watch time; sent for manual review.");
