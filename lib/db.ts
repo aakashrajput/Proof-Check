@@ -1,5 +1,5 @@
 import { createClient, type Client, type InValue } from "@libsql/client";
-import { applySchema } from "./schema.mjs";
+import { applySchema, SCHEMA_VERSION } from "./schema.mjs";
 
 // Local: DATABASE_URL=file:./data/proofcheck.db  (default)
 // Vercel/Turso: DATABASE_URL=libsql://xxx.turso.io  DATABASE_AUTH_TOKEN=...
@@ -90,14 +90,24 @@ export function dbInfo() {
 
 export async function ensureSchema() {
   if (!ready) {
-    ready = applySchema(db()).then(() => undefined).catch((e) => { ready = null; throw e; });
+    ready = (async () => {
+      const t0 = Date.now();
+      try {
+        const r = await db().execute("SELECT value FROM schema_meta WHERE key = 'version'");
+        if (Number(r.rows[0]?.value) === SCHEMA_VERSION) { if (process.env.DB_DEBUG) console.log(`[db] schema v${SCHEMA_VERSION} ok (${Date.now() - t0}ms)`); return; }
+      } catch { /* table missing → full apply */ }
+      await applySchema(db());
+      console.log(`[db] schema applied → v${SCHEMA_VERSION} (${Date.now() - t0}ms)`);
+    })().catch((e) => { ready = null; throw e; });
   }
   return ready;
 }
 
 export async function q<T = Record<string, unknown>>(sql: string, args: InValue[] = []): Promise<T[]> {
   await ensureSchema();
+  const t0 = Date.now();
   const r = await db().execute({ sql, args });
+  if (process.env.DB_DEBUG || Date.now() - t0 > 1500) console.log(`[db] ${Date.now() - t0}ms ${sql.slice(0, 70).replace(/\s+/g, " ")}`);
   return r.rows as unknown as T[];
 }
 
@@ -108,7 +118,10 @@ export async function one<T = Record<string, unknown>>(sql: string, args: InValu
 
 export async function run(sql: string, args: InValue[] = []) {
   await ensureSchema();
-  return db().execute({ sql, args });
+  const t0 = Date.now();
+  const r = await db().execute({ sql, args });
+  if (process.env.DB_DEBUG || Date.now() - t0 > 1500) console.log(`[db] ${Date.now() - t0}ms ${sql.slice(0, 70).replace(/\s+/g, " ")}`);
+  return r;
 }
 
 export type Campaign = {

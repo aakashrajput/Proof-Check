@@ -56,7 +56,8 @@ function slug() {
 }
 
 export async function createCampaign(fd: FormData) {
-  const u = await me();
+  const T = Date.now(); const lap = (what: string) => console.log(`[create] ${what} +${Date.now() - T}ms`);
+  const u = await me(); lap("auth");
   const name = String(fd.get("name") ?? "").trim();
   const videoId = parseVideoId(String(fd.get("video") ?? ""));
   if (!name || !videoId) redirect("/app?e=" + encodeURIComponent("Name and a valid YouTube URL or video ID are required."));
@@ -65,7 +66,7 @@ export async function createCampaign(fd: FormData) {
   const keywords = String(fd.get("keywords") ?? "").split("\n").map((s) => s.trim()).filter(Boolean).join("\n");
   const instructions = String(fd.get("instructions") ?? "").trim();
   const sgJob = String(fd.get("sg_job_id") ?? "").trim() || null;
-  const meta = await resolveVideo(videoId);
+  const meta = await resolveVideo(videoId); lap("youtube lookup");
   const duration = Number(fd.get("duration_seconds")) || meta.durationSeconds || null;
   const thumb = meta.thumbnails.high;
   const s = slug();
@@ -74,8 +75,9 @@ export async function createCampaign(fd: FormData) {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [s, name, videoId, meta.title, meta.channelTitle, meta.channelHandle, minFrames, minSeconds, keywords, instructions, sgJob, proofModeOf(fd), u.id, duration, thumb],
   );
+  lap("insert campaign");
   const c = await one<Campaign>("SELECT id FROM campaigns WHERE slug = ?", [s]);
-  await saveVariants(c!.id, parseVariants(fd, meta.title, thumb));
+  await saveVariants(c!.id, parseVariants(fd, meta.title, thumb)); lap("variants saved");
   revalidatePath("/app");
   redirect(`/app/c/${c!.id}?created=1`);
 }

@@ -13,8 +13,12 @@ export async function GET() {
     // other marketplace DBs people pick by mistake — present means "wrong kind of database for this app"
     POSTGRES_URL: has("POSTGRES_URL"), DATABASE_URL_UNPOOLED: has("DATABASE_URL_UNPOOLED"), KV_REST_API_URL: has("KV_REST_API_URL"), UPSTASH_REDIS_REST_URL: has("UPSTASH_REDIS_REST_URL"),
   };
-  let db: { ok: boolean; campaigns?: number; users?: number; error?: string } = { ok: false };
-  try { const r = await q<{ n: number }>("SELECT COUNT(*) n FROM campaigns"); const u = await q<{ n: number }>("SELECT COUNT(*) n FROM users"); db = { ok: true, campaigns: Number(r[0]?.n ?? 0), users: Number(u[0]?.n ?? 0) }; }
+  let db: { ok: boolean; campaigns?: number; users?: number; error?: string; firstQueryMs?: number; pingMs?: number } = { ok: false };
+  try {
+    const t0 = Date.now(); const r = await q<{ n: number }>("SELECT COUNT(*) n FROM campaigns"); const firstQueryMs = Date.now() - t0;
+    const t1 = Date.now(); const u = await q<{ n: number }>("SELECT COUNT(*) n FROM users"); const pingMs = Date.now() - t1;
+    db = { ok: true, campaigns: Number(r[0]?.n ?? 0), users: Number(u[0]?.n ?? 0), firstQueryMs, pingMs };
+  }
   catch (e) { db = { ok: false, error: String(e).replace(/eyJ[A-Za-z0-9_.-]{20,}/g, "[token redacted]").slice(0, 300) }; }
   const info = dbInfo();
   const warnings: string[] = [];
@@ -23,5 +27,6 @@ export async function GET() {
   if (env.POSTGRES_URL && info.backend === "sqlite-file") warnings.push("A Postgres database is attached but this app uses libSQL/Turso. Remove it and add Turso instead.");
   if (!env.ADMIN_PASSWORD) warnings.push("ADMIN_PASSWORD is not set; admin login is impossible.");
   if (!env.GEMINI_API_KEY) warnings.push("GEMINI_API_KEY not set: screenshot proof goes to manual review; text proof works.");
+  if (db.pingMs != null && db.pingMs > 400) warnings.push(`Database round-trip is ${db.pingMs}ms from region ${process.env.VERCEL_REGION ?? "?"}. Put the Vercel function in the same region as the database (vercel.json "regions").`);
   return NextResponse.json({ ok: db.ok, db: { ...info, ...db }, env, dbEnvNames: dbEnvNames(), warnings, vercel: !!process.env.VERCEL, region: process.env.VERCEL_REGION ?? null, at: new Date().toISOString() });
 }
