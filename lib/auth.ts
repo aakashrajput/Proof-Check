@@ -57,7 +57,8 @@ export async function currentUser(): Promise<User | null> {
   const c = await cookies();
   const id = parseSession(c.get(SESSION_COOKIE)?.value);
   if (!id) return null;
-  return one<User>("SELECT * FROM users WHERE id = ?", [id]);
+  try { return await one<User>("SELECT * FROM users WHERE id = ?", [id]); }
+  catch (e) { console.error("currentUser: database error", e); return null; }   // a broken DB must not 500 public pages
 }
 
 /**
@@ -70,7 +71,9 @@ export async function requireUser(nextPath = "/app"): Promise<User> {
   const raw = c.get(SESSION_COOKIE)?.value;
   const id = parseSession(raw);
   if (!id) redirect(`/login?next=${encodeURIComponent(nextPath)}`);
-  const u = await one<User>("SELECT * FROM users WHERE id = ?", [id]);
+  let u: User | null = null;
+  try { u = await one<User>("SELECT * FROM users WHERE id = ?", [id]); }
+  catch (e) { redirect(`/login?e=${encodeURIComponent("Database error: " + String((e as Error).message).slice(0, 160))}`); }
   if (!u) redirect(`/api/auth/logout?next=${encodeURIComponent("/login?e=" + encodeURIComponent("Your session was out of date. Please sign in again."))}`);
   return u!;
 }

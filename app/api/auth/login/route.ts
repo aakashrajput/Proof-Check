@@ -19,7 +19,9 @@ export async function POST(req: Request) {
   if (arr.length >= 20) return back("Too many attempts. Try again in a few minutes.");
   const email = String(fd.get("email") ?? "").trim().toLowerCase();
   const password = String(fd.get("password") ?? "");
-  const u = await one<User>("SELECT * FROM users WHERE email = ?", [email]);
+  let u: User | null = null;
+  try { u = await one<User>("SELECT * FROM users WHERE email = ?", [email]); }
+  catch (e) { return back(`${"Database is not reachable right now"}: ${String((e as Error).message).slice(0, 140)}`); }
   if (!u || !verifyPassword(password, u.password_hash)) { arr.push(now); return back("Wrong email or password."); }
   const res = NextResponse.redirect(new URL(safeNext, base), 303);
   res.cookies.set(SESSION_COOKIE, makeSession(u.id), sessionCookieOptions(base.protocol === "https:"));
