@@ -78,6 +78,7 @@ const page = await fetch(`${base}/t/${slug}?src=sg`).then((r) => r.text());
 ok(page.includes("Title A — original") && page.includes("Title B — test") && page.includes("Recognise the video"), "worker page shows A/B variants");
 ok(page.includes("kw one") || page.includes("kw two"), "worker page renders a keyword");
 ok(page.includes("What gets a proof declined") && page.includes("2:00 min"), "worker page shows requirements card with min watch time");
+ok(page.includes("Before you verify, confirm you did these") && page.includes("I subscribed to the channel"), "worker page shows the confirmation checklist");
 const other = await fetch(`${base}/app/c/${(await db.execute({ sql: "SELECT id FROM campaigns WHERE slug=?", args: [slug] })).rows[0].id}`, { headers: { cookie } }).then((r) => r.status);
 ok(other === 200, "owner can open campaign page");
 const stranger = await fetch(`${base}/api/auth/register`, { method: "POST", body: new URLSearchParams({ email: "x" + email, password: "correct horse battery" }), redirect: "manual" });
@@ -87,10 +88,11 @@ ok(denied === 404, "another user cannot open someone else's campaign (404)");
 const page2 = await fetch(`${base}/t/${slug}`).then((r) => r.text());
 ok((page.includes("kw one")) !== (page2.includes("kw one")), "keyword rotates between visits");
 
-async function submit(bytes, mockOverride, text, variantId) {
+async function submit(bytes, mockOverride, text, variantId, attested = "like,subscribe,comment") {
   // The server reads GEMINI_MOCK_JSON from env; we vary the *image bytes* and rely on a per-request header hook below.
   const fd = new FormData();
   fd.set("slug", slug); fd.set("src", "sg"); fd.set("worker_ref", "tester");
+  if (attested) fd.set("attested", attested);
   if (variantId) fd.set("variant_id", String(variantId));
   if (text) fd.set("text", text);
   if (bytes) fd.append("file", new Blob([bytes], { type: "image/png" }), "s.png");
@@ -100,8 +102,12 @@ async function submit(bytes, mockOverride, text, variantId) {
 const png = (tag) => Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.from(tag)]);
 const good = { has_stats_panel: true, video_id: VIDEO, scpn: "AAAA BBBB CCCC DDDD", frames_dropped: 3, frames_total: 4500, fps: 30, platform: "android", looks_edited: false, confidence: 0.95 };
 
-let r = await submit(png("a"), good);
+let r = await submit(png("a0"), good, null, null, "like,subscribe");
+ok(r.error && Array.isArray(r.missing) && r.missing.includes("comment"), "missing self-confirmation is rejected server-side (400 with missing list)");
+r = await submit(png("a"), good);
 ok(r.status === "pass" && /^pw-[a-f0-9]{8}$/.test(r.payout_code), `clean screenshot passes, code ${r.payout_code}`);
+const att = (await db.execute({ sql: "SELECT attested FROM submissions WHERE id=?", args: [r.submission_id] })).rows[0].attested;
+ok(att === "like,subscribe,comment", "confirmations recorded on the submission");
 const code = r.payout_code;
 r = await submit(png("a"), good);
 ok(r.reason === "duplicate_screenshot", "same bytes rejected as duplicate");

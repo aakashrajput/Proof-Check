@@ -2,7 +2,7 @@
 import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { run, one, type Campaign, type User } from "@/lib/db";
+import { run, one, parseAttest, type Campaign, type User } from "@/lib/db";
 import { parseVideoId, resolveVideo } from "@/lib/youtube";
 import { overridePass, overrideFail } from "@/lib/verify";
 import { sgFor, syncCampaign, sgCredsFor } from "@/lib/sproutgigs";
@@ -45,6 +45,8 @@ async function saveVariants(campaignId: number, vs: VariantIn[]) {
   }
 }
 
+function attestOf(fd: FormData) { return parseAttest(fd.getAll("attest").map(String).join(",")).join(","); }
+
 function proofModeOf(fd: FormData) {
   const m = String(fd.get("proof_mode") ?? "either");
   return ["either", "screenshot", "text", "both"].includes(m) ? m : "either";
@@ -71,9 +73,9 @@ export async function createCampaign(fd: FormData) {
   const thumb = meta.thumbnails.high;
   const s = slug();
   await run(
-    `INSERT INTO campaigns (slug, name, video_id, video_title, channel_title, channel_handle, min_frames, min_seconds, keywords, instructions, sg_job_id, proof_mode, owner_id, duration_seconds, thumbnail_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [s, name, videoId, meta.title, meta.channelTitle, meta.channelHandle, minFrames, minSeconds, keywords, instructions, sgJob, proofModeOf(fd), u.id, duration, thumb],
+    `INSERT INTO campaigns (slug, name, video_id, video_title, channel_title, channel_handle, min_frames, min_seconds, keywords, instructions, sg_job_id, proof_mode, owner_id, duration_seconds, thumbnail_url, attest)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [s, name, videoId, meta.title, meta.channelTitle, meta.channelHandle, minFrames, minSeconds, keywords, instructions, sgJob, proofModeOf(fd), u.id, duration, thumb, attestOf(fd)],
   );
   lap("insert campaign");
   const c = await one<Campaign>("SELECT id FROM campaigns WHERE slug = ?", [s]);
@@ -86,9 +88,9 @@ export async function updateCampaign(fd: FormData) {
   const u = await me();
   const c = await own(Number(fd.get("id")), u);
   const keywords = String(fd.get("keywords") ?? "").split("\n").map((s) => s.trim()).filter(Boolean).join("\n");
-  await run("UPDATE campaigns SET name=?, min_seconds=?, min_frames=?, keywords=?, instructions=?, sg_job_id=?, proof_mode=? WHERE id=?",
+  await run("UPDATE campaigns SET name=?, min_seconds=?, min_frames=?, keywords=?, instructions=?, sg_job_id=?, proof_mode=?, attest=? WHERE id=?",
     [String(fd.get("name") ?? c.name), Number(fd.get("min_seconds") ?? 0) || 0, Number(fd.get("min_frames") ?? 0) || 0, keywords,
-     String(fd.get("instructions") ?? ""), String(fd.get("sg_job_id") ?? "").trim() || null, proofModeOf(fd), c.id]);
+     String(fd.get("instructions") ?? ""), String(fd.get("sg_job_id") ?? "").trim() || null, proofModeOf(fd), attestOf(fd), c.id]);
   const v = parseVideoId(String(fd.get("video") ?? ""));
   let title = c.video_title, thumb = c.thumbnail_url;
   if (v && v !== c.video_id) {

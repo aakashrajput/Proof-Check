@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { one, q, run, type Campaign, type Variant } from "@/lib/db";
+import { one, q, run, parseAttest, type Campaign, type Variant } from "@/lib/db";
 import UploadForm from "./UploadForm";
 import CopyBtn from "./Copy";
 
@@ -92,6 +92,7 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
                 <li><b>While it's still playing, open Stats for nerds.</b><span>Mobile: tap <kbd>⋮</kbd> on the player → <i>Stats for nerds</i>. Computer: right-click the player → <i>Stats for nerds</i>.</span></li>
                 {mode !== "screenshot" && <li><b>Tap <i>Copy debug info</i>{mode === "either" ? " (fastest)" : ""}.</b><span>Paste the whole text into the proof box{mode === "both" ? ", and also" : ". Or, if there's no copy button,"} take a screenshot where <i>Video ID / sCPN</i> and <i>Viewport / Frames</i> are fully visible.</span></li>}
                 {mode === "screenshot" && <li><b>Take a screenshot of the panel.</b><span>The lines <i>Video ID / sCPN</i> and <i>Viewport / Frames</i> must be fully visible.</span></li>}
+                {parseAttest(c.attest).length > 0 && <li><b>Like, subscribe and comment as asked.</b><span>You'll confirm each one before verifying. The employer spot-checks these — a false confirmation gets the task declined.</span></li>}
                 <li><b>Press Verify.</b><span>You'll see exactly what passed. Only after <b className="ok">✓ VERIFIED</b> paste your <span className="mono">pw-</span> code into the job's proof box.</span></li>
               </ol>
             )}
@@ -114,7 +115,7 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
         <aside className="tright">
           <section className="tcard submit">
             <h2><span className="n accent">{(variants.length ? 1 : 0) + (keyword ? 1 : 0) + 2}</span> Submit your proof</h2>
-            <UploadForm slug={c.slug} src={src ?? null} workerRef={w ?? null} disabled={closed} mode={mode} variants={vopts} />
+            <UploadForm slug={c.slug} src={src ?? null} workerRef={w ?? null} disabled={closed} mode={mode} variants={vopts} attest={parseAttest(c.attest)} />
           </section>
           <p className="small muted privacy">Only the panel reading and a small fingerprint are kept. Screenshots and debug text are discarded after checking.</p>
         </aside>

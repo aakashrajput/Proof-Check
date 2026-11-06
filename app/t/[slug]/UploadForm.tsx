@@ -7,9 +7,17 @@ type Result = { status: "pass" | "fail" | "review"; reason: string; message: str
 type Mode = "either" | "screenshot" | "text" | "both";
 
 type VariantOpt = { id: number; label: string; title: string; thumb: string };
+type AttestKey = "like" | "subscribe" | "comment";
+const ATTEST_TEXT: Record<AttestKey, { label: string; hint: string; icon: string }> = {
+  like: { label: "I liked the video", hint: "Tap 👍 under the video", icon: "👍" },
+  subscribe: { label: "I subscribed to the channel", hint: "The button now reads “Subscribed”", icon: "🔔" },
+  comment: { label: "I left a relevant comment", hint: "About the video’s topic — not just “nice video”", icon: "💬" },
+};
 
-export default function UploadForm({ slug, src, workerRef, disabled, mode, variants = [] }: { slug: string; src: string | null; workerRef: string | null; disabled: boolean; mode: Mode; variants?: VariantOpt[] }) {
+export default function UploadForm({ slug, src, workerRef, disabled, mode, variants = [], attest = [] }: { slug: string; src: string | null; workerRef: string | null; disabled: boolean; mode: Mode; variants?: VariantOpt[]; attest?: AttestKey[] }) {
   const [variantId, setVariantId] = useState<number | null>(variants.length === 1 ? variants[0].id : null);
+  const [attested, setAttested] = useState<Set<AttestKey>>(new Set());
+  const attestOk = attest.every((k) => attested.has(k));
   const [files, setFiles] = useState<File[]>([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -18,8 +26,9 @@ export default function UploadForm({ slug, src, workerRef, disabled, mode, varia
   const [wref, setWref] = useState(workerRef ?? "");
 
   const showFiles = mode !== "text", showText = mode !== "screenshot";
-  const canSubmit = mode === "both" ? files.length > 0 && text.trim().length > 0
+  const proofOk = mode === "both" ? files.length > 0 && text.trim().length > 0
     : mode === "text" ? text.trim().length > 0 : mode === "screenshot" ? files.length > 0 : files.length > 0 || text.trim().length > 0;
+  const canSubmit = proofOk && attestOk;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,6 +40,7 @@ export default function UploadForm({ slug, src, workerRef, disabled, mode, varia
     if (wref) fd.set("worker_ref", wref);
     if (text.trim()) fd.set("text", text.trim());
     if (variantId) fd.set("variant_id", String(variantId));
+    if (attest.length) fd.set("attested", attest.filter((k) => attested.has(k)).join(","));
     files.slice(0, 2).forEach((f) => fd.append("file", f));
     try {
       const r = await fetch("/api/verify", { method: "POST", body: fd });
@@ -96,10 +106,25 @@ export default function UploadForm({ slug, src, workerRef, disabled, mode, varia
           ))}
         </div>
       </>)}
+      {attest.length > 0 && (
+        <div className={`attest ${attestOk ? "done" : ""}`}>
+          <div className="attest-head"><b>Before you verify, confirm you did these</b><span className="small muted">{attested.size}/{attest.length}</span></div>
+          {attest.map((k) => (
+            <label key={k} className={`attest-row ${attested.has(k) ? "on" : ""}`}>
+              <input type="checkbox" checked={attested.has(k)} disabled={disabled} onChange={(e) => setAttested((p) => { const n = new Set(p); if (e.target.checked) n.add(k); else n.delete(k); return n; })} />
+              <span className="box" aria-hidden="true" />
+              <span className="ico">{ATTEST_TEXT[k].icon}</span>
+              <span className="txt"><b>{ATTEST_TEXT[k].label}</b><span className="small muted">{ATTEST_TEXT[k].hint}</span></span>
+            </label>
+          ))}
+          <p className="small muted" style={{ margin: "6px 0 0" }}>The employer spot-checks these on YouTube. A false confirmation means the task is declined and you won't be paid.</p>
+        </div>
+      )}
       <label>Your worker ID / username (optional, helps the employer find you)</label>
       <input value={wref} onChange={(e) => setWref(e.target.value)} placeholder="e.g. your SproutGigs username" />
       <div style={{ marginTop: 12 }}>
         <button type="submit" disabled={busy || disabled || !canSubmit}>{busy ? "Verifying…" : "Verify proof"}</button>
+        {!attestOk && proofOk && <span className="small muted" style={{ marginLeft: 10 }}>Tick all confirmations above to continue.</span>}
       </div>
       {err && <div className="result fail">Error: {err}</div>}
       {res && (
@@ -116,6 +141,7 @@ export default function UploadForm({ slug, src, workerRef, disabled, mode, varia
             </ul>
           )}
           {res.payout_code && <>
+            {attest.length > 0 && <p className="small muted">You confirmed: {attest.map((k) => ATTEST_TEXT[k].label.replace(/^I /, "")).join(" · ")}.</p>}
             <div className="code">{res.payout_code}</div>
             <p className="small muted">Paste this code as your proof on the job page. It works once — don't share it.</p>
           </>}

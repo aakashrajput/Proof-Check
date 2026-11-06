@@ -10,7 +10,7 @@ type Props = {
   mode: "create" | "edit";
   gemReady: boolean;
   initial?: { id?: number; name?: string; video_id?: string; video_title?: string | null; channel_title?: string | null; channel_handle?: string | null;
-    min_seconds?: number; min_frames?: number; keywords?: string; instructions?: string; proof_mode?: string; sg_job_id?: string | null;
+    min_seconds?: number; min_frames?: number; keywords?: string; instructions?: string; proof_mode?: string; sg_job_id?: string | null; attest?: string;
     duration_seconds?: number | null; thumbnail_url?: string | null; variants?: VariantDraft[] };
 };
 
@@ -118,6 +118,13 @@ export default function CampaignForm({ action, mode, gemReady, initial = {} }: P
           </div>
         ))}
         {variants.length < 3 && <button type="button" className="secondary addv" onClick={addVariant}>+ Add variant {(["A", "B", "C"] as const)[variants.length]}</button>}
+      </div>
+
+      <h3 style={{ marginTop: 18 }}>Worker must confirm before verifying <span className="muted" style={{ textTransform: "none", letterSpacing: 0 }}>— self-declared; recorded on every submission so you can spot-check</span></h3>
+      <div className="attest-opts">
+        {([["like", "Liked the video"], ["subscribe", "Subscribed to the channel"], ["comment", "Left a relevant comment"]] as const).map(([k, l]) => (
+          <label key={k} className="attest-opt"><input type="checkbox" name="attest" value={k} defaultChecked={(initial.attest ?? "like,subscribe,comment").split(",").includes(k)} /> {l}</label>
+        ))}
       </div>
 
       <label htmlFor="keywords">Search keywords — one per line, rotated evenly across workers</label>

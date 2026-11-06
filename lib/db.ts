@@ -129,8 +129,19 @@ export type Campaign = {
   channel_title: string | null; channel_handle: string | null; min_frames: number; min_seconds: number;
   keywords: string; keyword_cursor: number; instructions: string; sg_job_id: string | null;
   status: string; created_at: string; proof_mode: "either" | "screenshot" | "text" | "both"; owner_id: number | null;
-  duration_seconds: number | null; thumbnail_url: string | null;
+  duration_seconds: number | null; thumbnail_url: string | null; attest: string;
 };
+
+export const ATTEST_OPTIONS = [
+  { key: "like", label: "I liked the video", hint: "Tap 👍 under the video" },
+  { key: "subscribe", label: "I subscribed to the channel", hint: "The button shows “Subscribed”" },
+  { key: "comment", label: "I left a relevant comment", hint: "About the video’s topic — not just “nice video”" },
+] as const;
+export type AttestKey = (typeof ATTEST_OPTIONS)[number]["key"];
+export function parseAttest(s: string | null | undefined): AttestKey[] {
+  const allowed = new Set(ATTEST_OPTIONS.map((o) => o.key));
+  return (s ?? "").split(",").map((x) => x.trim()).filter((x): x is AttestKey => allowed.has(x as AttestKey));
+}
 
 export type Variant = { id: number; campaign_id: number; label: string; title: string; thumb_url: string | null; thumb_data: string | null; position: number };
 
@@ -141,5 +152,5 @@ export type Submission = {
   sha256_2: string | null; scpn: string | null; video_id_read: string | null; frames_total: number | null;
   frames_dropped: number | null; fps: number | null; watch_seconds: number | null; status: string;
   reason: string; payout_code: string | null; raw_json: string | null; created_at: string;
-  text_sha256: string | null; source: string | null; played_seconds: number | null; variant_id: number | null;
+  text_sha256: string | null; source: string | null; played_seconds: number | null; variant_id: number | null; attested: string | null;
 };

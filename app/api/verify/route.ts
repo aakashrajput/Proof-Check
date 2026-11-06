@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { one, run, type Campaign } from "@/lib/db";
+import { one, run, parseAttest, type Campaign } from "@/lib/db";
 import { verifySubmission } from "@/lib/verify";
 
 
@@ -26,6 +26,12 @@ export async function POST(req: Request) {
   if (!c) return NextResponse.json({ error: "Unknown task" }, { status: 404 });
   if (c.status !== "active") return NextResponse.json({ error: "This task is closed" }, { status: 410 });
 
+  // Required self-confirmations (like / subscribe / comment) — enforced server-side too.
+  const required = parseAttest(c.attest);
+  const attested = parseAttest(String(fd.get("attested") ?? ""));
+  const missing = required.filter((k) => !attested.includes(k));
+  if (missing.length) return NextResponse.json({ error: `Please confirm: ${missing.join(", ")}.`, missing }, { status: 400 });
+
   const files: { bytes: Buffer; mime: string }[] = [];
   for (const f of fd.getAll("file")) {
     if (f instanceof File && f.size > 0) files.push({ bytes: Buffer.from(await f.arrayBuffer()), mime: f.type || "application/octet-stream" });
@@ -36,6 +42,7 @@ export async function POST(req: Request) {
     const result = await verifySubmission(c, files,
       { worker_ref: (fd.get("worker_ref") as string) || null, src: (fd.get("src") as string) || null, mock: req.headers.get("x-mock-read") },
       (fd.get("text") as string) || null);
+    if (attested.length && result.submission_id) await run("UPDATE submissions SET attested = ? WHERE id = ?", [attested.join(","), result.submission_id]);
     const variantId = Number(fd.get("variant_id")) || 0;
     if (variantId && result.submission_id) {
       const v = await one("SELECT id FROM campaign_variants WHERE id = ? AND campaign_id = ?", [variantId, c.id]);

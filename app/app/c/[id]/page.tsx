@@ -88,7 +88,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
         <h3>Submissions (latest 300)</h3>
         {subs.length === 0 && <p className="muted">Nothing yet.</p>}
         {subs.length > 0 && (
-          <table><thead><tr><th>#</th><th>When (UTC)</th><th>Worker</th><th>Result</th><th>Reason</th><th>Via</th><th>Saw</th><th>Video</th><th>Frames</th><th>~sec</th><th>sCPN</th><th>Code</th><th></th></tr></thead>
+          <table><thead><tr><th>#</th><th>When (UTC)</th><th>Worker</th><th>Result</th><th>Reason</th><th>Via</th><th>Saw</th><th>Confirmed</th><th>Video</th><th>Frames</th><th>~sec</th><th>sCPN</th><th>Code</th><th></th></tr></thead>
             <tbody>{subs.map((s) => (
               <tr key={s.id}>
                 <td>{s.id}</td><td className="small">{s.created_at}</td><td className="small">{s.worker_ref ?? "—"}{s.src ? <span className="muted"> · {s.src}</span> : null}</td>
@@ -96,6 +96,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
                 <td className="small">{s.reason}</td>
                 <td className="small muted">{s.source ?? "—"}</td>
                 <td className="small">{variants.find((v) => v.id === s.variant_id)?.label ?? "—"}</td>
+                <td className="small" title={s.attested ?? ""}>{s.attested ? s.attested.split(",").map((a) => a === "like" ? "👍" : a === "subscribe" ? "🔔" : "💬").join(" ") : "—"}</td>
                 <td className="small" style={{ color: s.video_id_read && s.video_id_read !== c.video_id ? "var(--bad)" : undefined }}>{s.video_id_read ?? "—"}</td>
                 <td>{s.frames_total ?? "—"}</td><td title={s.played_seconds != null ? `played ranges: ${s.played_seconds}s` : undefined}>{s.watch_seconds != null ? Math.round(s.watch_seconds) : "—"}</td>
                 <td className="small" style={{ fontFamily: "var(--mono)" }}>{s.scpn ? s.scpn.slice(0, 8) + "…" : "—"}</td>
@@ -109,7 +110,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
       </div>
 
       <CampaignForm action={updateCampaign} mode="edit" gemReady={gemReady} initial={{ id: c.id, name: c.name, video_id: c.video_id, video_title: c.video_title, channel_title: c.channel_title, channel_handle: c.channel_handle,
-        min_seconds: c.min_seconds, min_frames: c.min_frames, keywords: c.keywords, instructions: c.instructions, proof_mode: c.proof_mode, sg_job_id: c.sg_job_id, duration_seconds: c.duration_seconds, thumbnail_url: c.thumbnail_url,
+        min_seconds: c.min_seconds, min_frames: c.min_frames, keywords: c.keywords, instructions: c.instructions, proof_mode: c.proof_mode, sg_job_id: c.sg_job_id, duration_seconds: c.duration_seconds, thumbnail_url: c.thumbnail_url, attest: c.attest,
         variants: variants.map((v) => ({ id: v.id, label: v.label as "A" | "B" | "C", title: v.title, thumb_url: v.thumb_url, thumb_data: v.thumb_data })) }} />
     </div>
   );
