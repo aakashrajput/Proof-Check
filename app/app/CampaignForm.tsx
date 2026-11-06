@@ -25,6 +25,7 @@ export default function CampaignForm({ action, mode, gemReady, initial = {} }: P
   } : null);
   const [lookup, setLookup] = useState<"idle" | "loading" | "error">("idle");
   const [minSeconds, setMinSeconds] = useState<number>(initial.min_seconds ?? 120);
+  const minMinutes = Math.round((minSeconds / 60) * 100) / 100;
   const [variants, setVariants] = useState<VariantDraft[]>(initial.variants?.length ? initial.variants : [{ label: "A", title: initial.video_title ?? "", thumb_url: initial.thumbnail_url ?? null, thumb_data: null }]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastId = useRef<string | null>(initial.video_id ?? null);
@@ -87,8 +88,17 @@ export default function CampaignForm({ action, mode, gemReady, initial = {} }: P
       )}
 
       <div className="row">
-        <div><label htmlFor="min_seconds">Minimum watch time (seconds){meta?.durationSeconds ? <span className="muted"> — video is {fmt(meta.durationSeconds)}</span> : null}</label>
-          <input id="min_seconds" name="min_seconds" type="number" min={0} value={minSeconds} onChange={(e) => setMinSeconds(Number(e.target.value) || 0)} />
+        <div><label htmlFor="min_minutes">Minimum watch time (minutes){meta?.durationSeconds ? <span className="muted"> — video is {fmt(meta.durationSeconds)}</span> : null}</label>
+          <div className="withunit">
+            <input id="min_minutes" type="number" min={0} step={0.5} value={minMinutes} onChange={(e) => setMinSeconds(Math.round((Number(e.target.value) || 0) * 60))} />
+            <span className="unit">min{minSeconds ? <> = {fmt(minSeconds)}</> : null}</span>
+          </div>
+          <input type="hidden" name="min_seconds" value={minSeconds} />
+          <div className="chips" style={{ marginTop: 6 }}>
+            {[1, 2, 3, 5].map((m) => <button type="button" key={m} className="chip" onClick={() => setMinSeconds(m * 60)}>{m} min</button>)}
+            {meta?.durationSeconds ? <button type="button" className="chip" onClick={() => setMinSeconds(Math.round(meta.durationSeconds! * 0.5))}>half the video</button> : null}
+            {meta?.durationSeconds ? <button type="button" className="chip" onClick={() => setMinSeconds(Math.max(0, meta.durationSeconds! - 10))}>almost all</button> : null}
+          </div>
           {meta?.durationSeconds && minSeconds > meta.durationSeconds && <div className="small" style={{ color: "var(--bad)" }}>Longer than the video — nobody can pass.</div>}
         </div>
         <div><label htmlFor="min_frames">Minimum frames (optional, used when fps isn't readable)</label><input id="min_frames" name="min_frames" type="number" min={0} defaultValue={initial.min_frames ?? 0} /></div>

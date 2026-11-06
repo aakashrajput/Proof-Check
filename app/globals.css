@@ -145,3 +145,25 @@ ol.timeline kbd { font: 600 12px var(--mono, monospace); background: #0b0a0f; bo
   .vcards.big .vcard { padding: 6px; }
   .vcards.big .vt { font-size: 11.5px; -webkit-line-clamp: 3; }
 }
+
+/* debug-info hint */
+details.hint { margin-top: 6px; border: 1px solid var(--line); border-radius: 10px; background: #0b0a0f; }
+details.hint summary { cursor: pointer; padding: 9px 12px; font-size: 13px; color: var(--accent); font-weight: 600; list-style: none; }
+details.hint summary::before { content: "▸ "; } details.hint[open] summary::before { content: "▾ "; }
+details.hint summary::-webkit-details-marker { display: none; }
+.hint-body { padding: 4px 12px 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 18px; font-size: 13px; }
+.hint-col ol { margin: 6px 0 0; padding-left: 18px; } .hint-col li { margin: 3px 0; color: var(--muted); } .hint-col li b { color: var(--ink); }
+.hint-col kbd { font: 600 11px var(--mono); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.hint-mock { grid-column: 1 / -1; display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; }
+.mock-menu, .mock-panel { background: #1c1b22; border: 1px solid #2f2d38; border-radius: 8px; font-size: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+.mock-menu { min-width: 190px; padding: 6px 0; } .mock-menu span { display: block; padding: 5px 12px; color: #cfc8dd; } .mock-menu span.hl { background: var(--accent); color: #fff; }
+.mock-panel { flex: 1; min-width: 220px; padding: 8px 10px; font-family: var(--mono); font-size: 11px; color: #9a93a8; }
+.mock-panel div { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; } .mock-panel b { color: #ece8f3; font-weight: 500; text-align: right; overflow-wrap: anywhere; }
+.mock-panel .mock-btn { display: inline-block; margin-top: 6px; padding: 3px 8px; border: 1px solid var(--accent); color: var(--accent); border-radius: 4px; font-family: var(--sans, inherit); font-weight: 600; }
+.hint-body p { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 600px) { .hint-body { grid-template-columns: 1fr; } }
+/* minutes input */
+.withunit { display: flex; align-items: center; gap: 8px; } .withunit input { flex: 1; } .withunit .unit { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 99px; padding: 3px 10px; font: 500 12px var(--sans, inherit); cursor: pointer; }
+.chip:hover { border-color: var(--accent); color: var(--text); }

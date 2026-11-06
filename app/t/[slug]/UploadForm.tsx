@@ -46,7 +46,35 @@ export default function UploadForm({ slug, src, workerRef, disabled, mode, varia
       {showText && (<>
         <label>{mode === "both" ? "1. Debug info text (required)" : mode === "text" ? "Debug info text" : "Option A — paste debug info (fastest, most reliable)"}</label>
         <textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} disabled={disabled}
-          placeholder={'In the player: ⋮ → Stats for nerds → "Copy debug info", then paste here. Starts with {"ns":"yt",…'} spellCheck={false} />
+          placeholder={'Paste the "Copy debug info" text here. It starts with {"ns":"yt",…'} spellCheck={false} />
+        <details className="hint">
+          <summary>How do I get the debug info?</summary>
+          <div className="hint-body">
+            <div className="hint-col">
+              <b>💻 Computer</b>
+              <ol>
+                <li>While the video is playing, <b>right-click</b> anywhere on the video.</li>
+                <li>Click <b>Stats for nerds</b> in the menu — a small panel appears over the video.</li>
+                <li>Click <b>Copy debug info</b> (bottom of that panel).</li>
+                <li>Come back here and paste (<kbd>Ctrl</kbd>+<kbd>V</kbd> / <kbd>⌘</kbd>+<kbd>V</kbd>).</li>
+              </ol>
+            </div>
+            <div className="hint-col">
+              <b>📱 YouTube app</b>
+              <ol>
+                <li>Tap the video once, then tap the <b>⚙️ gear</b> (or <b>⋮</b>) on the player.</li>
+                <li>Tap <b>Stats for nerds</b>. If it's missing, turn it on once: profile → Settings → General → <i>Stats for nerds</i>.</li>
+                <li>Tap the <b>copy icon</b> in the panel's corner.</li>
+                <li>Long-press the box above → <b>Paste</b>.</li>
+              </ol>
+            </div>
+            <div className="hint-mock" aria-hidden="true">
+              <div className="mock-menu"><span>Loop</span><span>Copy video URL</span><span>Copy video URL at current time</span><span>Copy embed code</span><span className="hl">Stats for nerds</span></div>
+              <div className="mock-panel"><div>Video ID / sCPN <b>dQw4w9WgXcQ / 7KQM 2X9L …</b></div><div>Viewport / Frames <b>1280x720 / 2 dropped of 4312</b></div><div>Current / Optimal Res <b>1280x720@30</b></div><div className="mock-btn">Copy debug info</div></div>
+            </div>
+            <p className="small muted">Watch it done: <a href="https://youtu.be/_CZmpnAcYSw" target="_blank" rel="noreferrer">computer</a> · <a href="https://youtu.be/DiFh80eNYsM" target="_blank" rel="noreferrer">phone</a>. The text is ~1,500 characters; paste all of it without editing.</p>
+          </div>
+        </details>
       </>)}
       {showFiles && (<>
         <label>{mode === "both" ? "2. Screenshot (required)" : mode === "screenshot" ? "Screenshot" : "Option B — upload a screenshot of the panel"}</label>
