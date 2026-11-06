@@ -60,7 +60,7 @@ const FIX: Record<string, string> = {
   duplicate_screenshot: "Watch the video again in a fresh session and take a new screenshot. Reusing a screenshot — yours or anyone else's — is always declined.",
   duplicate_text: "Watch the video again and copy fresh debug info. Re-pasting the same text is always declined.",
   text_unreadable: "Open the video, tap ⋮ (or right-click the player) → Stats for nerds → Copy debug info, and paste the whole thing without editing.",
-  text_cut_off: "Go back to the video (keep it playing), open Stats for nerds, tap the COPY icon in the panel — don't select text by hand — then come back, long-press the box and Paste. Check it begins with {\"ns\":\"yt\".",
+  text_cut_off: "Go back to the video (keep it playing), open Stats for nerds, tap the COPY icon in the panel — don't select text by hand — then come back, long-press the box and Paste the whole text.",
   text_invalid: "Copy the debug info again without changing anything. Edited numbers are detected and declined.",
   stale_proof: "Watch the video again now and copy fresh debug info — proof must be recent.",
   panel_missing: "Open Stats for nerds and make sure the 'Video ID / sCPN' and 'Viewport / Frames' lines are fully visible before you screenshot. Or paste the 'Copy debug info' text instead.",
@@ -152,18 +152,21 @@ export async function verifySubmission(
     ctx.text = t;
     if (t.problems.includes("unrecognized") || t.problems.includes("no_video_id") || t.problems.includes("no_cpn")) {
       const flat = text.replace(/\s+/g, " ");
-      ctx.note = `unreadable sample (${text.length} chars): ${flat.slice(0, 600)}${flat.length > 800 ? " … " + flat.slice(-200) : flat.length > 600 ? " … " + flat.slice(600) : ""}`;
+      // Record the key names when it is JSON, so an unknown schema (e.g. a new app version) is visible without storing every value.
+      let keys = "";
+      try { const a = text.indexOf("{"), b = text.lastIndexOf("}"); if (a !== -1 && b > a) keys = " keys=[" + Object.keys(JSON.parse(text.slice(a, b + 1))).join(",") + "]"; } catch { keys = " keys=[" + Array.from(text.matchAll(/"([A-Za-z0-9_]+)"\s*:/g)).map((m) => m[1]).join(",") + "]"; }
+      ctx.note = `unreadable sample (${text.length} chars)${keys}: ${flat.slice(0, 600)}${flat.length > 800 ? " … " + flat.slice(-200) : flat.length > 600 ? " … " + flat.slice(600) : ""}`;
       const looksYt = /"(cplayer|cplatform|cver|cbr|cos|fexp|el)"\s*:/.test(text) || /PLATYPUS|UNIPLAYER|com\.google\.android\.youtube/.test(text);
       const android = /"c"\s*:\s*"android"|com\.google\.android\.youtube|PLATYPUS/i.test(text);
-      const cutStart = looksYt && !/^\s*\{\s*"ns"/.test(text);
+      const cutStart = looksYt && !/^\s*\{/.test(text);   // desktop starts {"ns":"yt", Android starts {"cplatform": — both begin with "{"
       if (looksYt) {
         return fail(campaign, meta, ctx, "text_cut_off",
           (cutStart ? "Your paste is cut off — it starts in the middle of the debug info, so the video ID and playback ID are missing. " : "Your paste is incomplete — the video ID and playback ID are missing. ")
           + (android
-            ? "On Android: don't select the text by hand. In the Stats for nerds panel tap the small COPY icon (top-right of the panel), then long-press this box → Paste. The full text starts with {\"ns\":\"yt\"."
-            : "Use the 'Copy debug info' button in the Stats for nerds panel (don't select the text by hand), then paste the whole thing — it starts with {\"ns\":\"yt\"."));
+            ? "On Android: in the Stats for nerds panel tap the small COPY icon (top-right of the panel) — don't select the text by hand — then long-press this box → Paste the whole thing."
+            : "Use the 'Copy debug info' button in the Stats for nerds panel (don't select the text by hand), then paste the whole thing."));
       }
-      return fail(campaign, meta, ctx, "text_unreadable", "The pasted text isn't YouTube debug info. Open ⋮ → Stats for nerds → tap the copy icon / 'Copy debug info', then paste ALL of it (it starts with {\"ns\":\"yt\" and is ~1,500 characters).");
+      return fail(campaign, meta, ctx, "text_unreadable", "The pasted text isn't YouTube debug info. Open ⋮ → Stats for nerds → tap the copy icon / 'Copy debug info', then paste ALL of it (it starts with { and is usually 1,000–2,000 characters).");
     }
     if (t.problems.includes("bad_video_id") || t.problems.includes("bad_cpn") || t.problems.includes("played_gt_duration") || t.problems.includes("vct_gt_duration"))
       return fail(campaign, meta, ctx, "text_invalid", "The debug info looks altered or incomplete. Copy it again without editing.");

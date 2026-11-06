@@ -36,8 +36,11 @@ export function parseDebugText(input: string): TextRead {
       out.format = "json";
       const s = (k: string) => (j[k] == null ? null : String(j[k]));
       const n = (k: string) => { const v = j[k]; if (v == null || v === "") return null; const x = Number(v); return Number.isFinite(x) ? x : null; };
-      out.video_id = s("docid") ?? s("debug_videoId") ?? s("videoId") ?? s("video_id");
-      out.scpn = s("cpn") ?? s("scpn");
+      out.video_id = s("docid") ?? s("debug_videoId") ?? s("videoId") ?? s("video_id") ?? s("vid") ?? s("v") ?? s("videoid");
+      out.scpn = s("cpn") ?? s("scpn") ?? s("client_playback_nonce") ?? s("clientPlaybackNonce");
+      // Last resort: any key whose name contains "cpn"/"nonce", or any 11-char value under a key containing "video"/"doc"
+      if (!out.scpn) for (const [k, v] of Object.entries(j)) if (/cpn|nonce/i.test(k) && typeof v === "string" && /^[A-Za-z0-9_-]{12,24}$/.test(v)) { out.scpn = v; break; }
+      if (!out.video_id) for (const [k, v] of Object.entries(j)) if (/video|doc/i.test(k) && typeof v === "string" && /^[A-Za-z0-9_-]{11}$/.test(v)) { out.video_id = v; break; }
       out.frames_total = n("totalVideoFrames") ?? n("totalFrames") ?? n("total_frames");
       out.frames_dropped = n("droppedVideoFrames") ?? n("droppedFrames") ?? n("dropped_frames");
       out.vct = n("vct") ?? n("cmt");
@@ -53,12 +56,12 @@ export function parseDebugText(input: string): TextRead {
   }
 
   // 1b. Broken / truncated JSON: pull fields out with regexes even when JSON.parse fails
-  if (out.format !== "json" && /"(docid|cpn|debug_videoId|vct|vpl)"\s*:/.test(text)) {
+  if (out.format !== "json" && /"(docid|cpn|debug_videoId|vct|vpl|cmt|cplayer)"\s*:/.test(text)) {
     out.format = "json";
     const g = (k: string) => text.match(new RegExp(`"${k}"\\s*:\\s*"?([^",}]*)`))?.[1]?.trim() ?? null;
     const n = (k: string) => { const v = g(k); if (v == null || v === "") return null; const x = Number(v); return Number.isFinite(x) ? x : null; };
-    out.video_id = g("docid") ?? g("debug_videoId") ?? g("videoId");
-    out.scpn = g("cpn");
+    out.video_id = g("docid") ?? g("debug_videoId") ?? g("videoId") ?? g("video_id") ?? g("vid");
+    out.scpn = g("cpn") ?? g("client_playback_nonce");
     out.frames_total = n("totalVideoFrames") ?? n("totalFrames");
     out.frames_dropped = n("droppedVideoFrames") ?? n("droppedFrames");
     out.vct = n("vct") ?? n("cmt"); out.duration = n("vd") ?? n("len");

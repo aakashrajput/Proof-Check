@@ -179,10 +179,16 @@ r = await submit(null, null, dbg({ cpn: "Dd1Bb2Cc3Dd4Ee5F", vpl: "0.000-500.000"
 ok(r.reason === "text_invalid", "played > duration rejected as tampered");
 r = await submit(null, null, `atform":"mobile","cff":"SMALL_FORM_FACTOR","c":"android","cplayer":"PLATYPUS","cmodel":"V2430","cos":"Android","cver":"21.44.534","cbr":"com.google.android.youtube"`, null, "like,subscribe,comment", "andro_01");
 ok(r.reason === "text_cut_off" && /Android/.test(r.message) && /copy icon/i.test(r.message) && /cut off/.test(r.message), "cut-off Android paste gets a specific 'use the copy icon' message");
+// Android-style JSON (starts with device fields, no "ns") with ids under different names still parses
+r = await submit(null, null, JSON.stringify({ cplatform: "mobile", c: "android", cplayer: "PLATYPUS", cver: "21.44.534", video_id: VIDEO, client_playback_nonce: "AndroidNonce1234", cmt: "150.4", len: "212.1", timestamp: Date.now() }), null, "like,subscribe,comment", "andro_02");
+ok(r.status === "pass", `Android-style JSON with alternate key names verifies (${r.reason})`);
+const unreadAndroid = await submit(null, null, JSON.stringify({ cplatform: "mobile", c: "android", cplayer: "PLATYPUS", cmodel: "V2430", mystery: "x" }), null, "like,subscribe,comment", "andro_03");
+const noteA = (await db.execute({ sql: "SELECT raw_json FROM submissions WHERE id=?", args: [unreadAndroid.submission_id] })).rows[0].raw_json;
+ok(unreadAndroid.reason === "text_cut_off" && /keys=\[cplatform,c,cplayer,cmodel,mystery\]/.test(String(noteA)), "unreadable JSON records its key names for schema diagnosis");
 r = await submit(null, null, "hello i watched the video pls approve");
 ok(r.reason === "text_unreadable", "free text rejected as unreadable");
 const unread = (await db.execute({ sql: "SELECT raw_json FROM submissions WHERE id=?", args: [r.submission_id] })).rows[0].raw_json;
-ok(/unreadable sample: hello i watched/.test(String(unread)), "unreadable paste keeps a short sample for diagnosis");
+ok(/unreadable sample \(\d+ chars\).*hello i watched/.test(String(unread)), "unreadable paste keeps a short sample for diagnosis");
 r = await submit(png("nw"), good, null, null, "like,subscribe,comment", "");
 ok(r.error && /worker username/i.test(r.error), "missing worker id is rejected (400)");
 r = await submit(null, null, `Video ID / sCPN  ${VIDEO} / EE1B B2CC 3DD4 EE5F\nViewport / Frames  1280x720*2.00 / 2 dropped of 4200\nCurrent / Optimal Res  1280x720@30 / 1280x720@30`);
