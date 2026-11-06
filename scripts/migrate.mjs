@@ -46,10 +46,12 @@ if (url) {
   else if (authToken && /\s/.test(authToken)) problems.push("DATABASE_AUTH_TOKEN contains whitespace — re-paste it");
   else if (authToken && !/^eyJ/.test(authToken)) problems.push("DATABASE_AUTH_TOKEN doesn't look like a Turso token (they start with eyJ)");
 }
+if (url && !/^(libsql|https?|wss?|file):\/\//i.test(url)) problems.push(`DATABASE_URL has no scheme — it must start with libsql:// (e.g. libsql://proofcheck-yourname.aws-ap-south-1.turso.io). Got "${url.slice(0, 20)}…"`);
+if (url && /^eyJ/.test(url)) problems.push("DATABASE_URL looks like a token (starts with eyJ) — the URL and the token are swapped");
 for (const p of problems) console.warn("[migrate] WARNING:", p);
 
-const client = createClient({ url: target, authToken });
 try {
+  const client = createClient({ url: target, authToken });
   const t0 = Date.now();
   const rep = await applySchema(client);
   const host = target.startsWith("file:") ? target : new URL(target).host;
