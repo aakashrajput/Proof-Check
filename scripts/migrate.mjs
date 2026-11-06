@@ -57,7 +57,7 @@ try {
   const host = target.startsWith("file:") ? target : new URL(target).host;
   console.log(`[migrate] ok → ${host} · schema v${rep.version} · ${rep.created} statements · columns added: ${rep.columnsAdded.length ? rep.columnsAdded.join(", ") : "none"} · ${Date.now() - t0}ms`);
 } catch (e) {
-  console.error("[migrate] FAILED:", e.message ?? e);
+  console.error("[migrate] FAILED:", String(e.message ?? e).replace(/eyJ[A-Za-z0-9_.-]{20,}/g, "[token redacted]"));
   if (onVercel && !strict) {
     // Don't take the whole deploy down for a DB hiccup: the app applies the schema itself on first request,
     // and /api/health shows the real error. Use --strict to make this fatal.

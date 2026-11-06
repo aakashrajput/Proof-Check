@@ -15,7 +15,7 @@ export async function GET() {
   };
   let db: { ok: boolean; campaigns?: number; users?: number; error?: string } = { ok: false };
   try { const r = await q<{ n: number }>("SELECT COUNT(*) n FROM campaigns"); const u = await q<{ n: number }>("SELECT COUNT(*) n FROM users"); db = { ok: true, campaigns: Number(r[0]?.n ?? 0), users: Number(u[0]?.n ?? 0) }; }
-  catch (e) { db = { ok: false, error: String(e).slice(0, 300) }; }
+  catch (e) { db = { ok: false, error: String(e).replace(/eyJ[A-Za-z0-9_.-]{20,}/g, "[token redacted]").slice(0, 300) }; }
   const info = dbInfo();
   const warnings: string[] = [];
   const pw = dbPersistenceWarning(); if (pw) warnings.unshift(pw);

@@ -71,9 +71,18 @@ export function dbEnvNames() {
 }
 
 /** Which backend is in use, for diagnostics (never includes secrets). */
+/** Never echo secrets: a value that isn't a parseable URL could be a token pasted in the wrong field. */
+function safeHost(url: string): string {
+  if (url.startsWith("file:")) return url;
+  try { const h = new URL(url).host; if (h && h.includes(".")) return h; } catch { /* fall through */ }
+  if (/^eyJ/.test(url)) return "[invalid: value looks like an auth token — URL and token are swapped]";
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return `[invalid: no libsql:// scheme, starts with "${url.slice(0, 8)}…"]`;
+  return "[invalid URL]";
+}
+
 export function dbInfo() {
   const { url, authToken, source } = resolveDb();
-  let host = url; try { if (!url.startsWith("file:")) host = new URL(url).host; } catch { /* keep raw */ }
+  const host = safeHost(url);
   return { backend: url.startsWith("file:") ? "sqlite-file" : "libsql-remote", host, source, hasToken: !!authToken, ephemeral: dbIsEphemeral(), perDeployment: dbIsPerDeployment(), persistent: !dbIsEphemeral() && !dbIsPerDeployment() };
 }
 
